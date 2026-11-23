@@ -27,6 +27,7 @@ class Admin extends BaseController
         'fleet_warn_days'   => ['Fleet warning (days)', 'Insurance, fitness, road tax, licences and services due within this many days are flagged.'],
         'transfer_loss_note' => ['Note required for transfer losses (1 = yes)', 'A final transfer receipt with missing units needs a note.'],
         'session_idle_minutes' => ['Sign out after idle (minutes)', ''],
+        'single_session'    => ['One sign-in per account (1 = on, 0 = off)', 'On: signing in on another device or browser signs the first one out, and it is told why.'],
         'mail_from'         => ['E-mail sender address', 'Leave empty to send no e-mail.'],
         'mail_from_name'    => ['E-mail sender name', ''],
         'smtp_host'         => ['SMTP server', 'Empty: the server\'s own mail.'],

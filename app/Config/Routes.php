@@ -13,6 +13,7 @@ $routes->post('login', 'AuthController::doLogin');
 $routes->get('install', 'Install::index');
 $routes->post('install', 'Install::run');
 $routes->get('cron/run', 'Cron::run');
+$routes->get('health', 'Cron::health'); // core 1.1
 $routes->get('api/ping', 'Home::ping');
 
 $routes->group('', ['filter' => 'auth'], static function ($routes) {

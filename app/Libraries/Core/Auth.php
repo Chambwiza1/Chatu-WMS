@@ -32,6 +32,13 @@ final class Auth
             session()->destroy();
             return null;
         }
+        if (! self::sessionCurrent(self::storedKey((int) $u['id']), session('skey'))) {
+            // core 1.1 (B7, as ChatuPOS): one sign-in per account; a newer sign-in elsewhere ended this one
+            session()->remove(['uid', 'skey', 'tid', 'last_seen']);
+            session()->regenerate(true);
+            session()->setFlashdata('error', 'You were signed out because your account signed in on another device or browser.');
+            return null;
+        }
         self::$cache = $u;
         return $u;
     }
@@ -91,10 +98,51 @@ final class Auth
         return $hash && password_verify($password, $hash);
     }
 
+    /**
+     * core 1.1 (B7, as ChatuPOS beta7): is this session still the account's current one? With the setting
+     * single_session on (the default), each sign-in gets a new key and older sessions of the same account end.
+     * Before the database update has added the column, or with the setting off, every session is current.
+     */
+    public static function sessionCurrent(?string $userKey, $sessionKey): bool
+    {
+        if (Settings::get('single_session') === '0' || $userKey === null) {
+            return true;
+        }
+        return is_string($sessionKey) && hash_equals($userKey, $sessionKey);
+    }
+
+    /** The account's current session key, or null (no key yet, or the column is not there before the update). */
+    public static function storedKey(int $userId): ?string
+    {
+        try {
+            $k = Db::value('SELECT session_key FROM {users} WHERE id = ?', [$userId]);
+        } catch (\Throwable $e) {
+            return null;
+        }
+        return is_string($k) && $k !== '' ? $k : null;
+    }
+
+    /** A new key for a sign-in; an older sign-in of the same account (another device or browser) ends at its next page. */
+    private static function newKey(int $userId): string
+    {
+        $key = bin2hex(random_bytes(20));
+        try {
+            $had = self::storedKey($userId);
+            Db::exec('UPDATE {users} SET session_key = ? WHERE id = ?', [$key, $userId]);
+            if ($had !== null && Settings::get('single_session') !== '0') {
+                Audit::log('auth.session_replaced', 'user', $userId, null, null, 'success', 'A newer sign-in ended the one open elsewhere');
+            }
+        } catch (\Throwable $e) {
+            // before the database update: no key yet
+        }
+        return $key;
+    }
+
     public static function startSession(array $u): void
     {
         session()->regenerate(true);
-        session()->set(['uid' => (int) $u['id'], 'last_seen' => time()]);
+        $key = self::newKey((int) $u['id']); // core 1.1 (B7): this sign-in becomes the account's current one
+        session()->set(['skey' => $key, 'uid' => (int) $u['id'], 'last_seen' => time()]);
         self::$cache = null;
         Access::flush();
         Audit::log('auth.login', 'user', $u['id'], null, null, 'success');

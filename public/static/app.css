@@ -513,3 +513,15 @@ body.roll .lbl { page: roll; }
 .scan-box > video, .scan-box > [data-scan-status] { flex-basis: 100%; }
 .scan-box > [data-scan-status]:empty { display: none; }
 .offline-main .scan-box { justify-content: flex-start; margin: 10px 0 14px; }
+
+/* core 1.1 (C4, as Chatu Assets 2.1 and ChatuPOS beta20): in a row of fields the labels, boxes and hints each share
+   one line, so a long label or a hint on one field no longer pushes its box below its neighbours'. */
+.field { align-content: start; }
+.row2, .row3 { align-items: start; }
+.row2 > .field > input:not([type=checkbox]):not([type=radio]):not([type=file]), .row2 > .field > select,
+.row3 > .field > input:not([type=checkbox]):not([type=radio]):not([type=file]), .row3 > .field > select { width: 100%; box-sizing: border-box; }
+@supports (grid-template-rows: subgrid) {
+  .row2, .row3 { grid-template-rows: auto auto auto; }
+  .row2 > .field, .row3 > .field { grid-row: span 3; grid-template-rows: subgrid; gap: 4px; align-content: start; }
+  .row2 > .field > label, .row3 > .field > label, .row2 > .field > .label, .row3 > .field > .label { align-self: end; }
+}

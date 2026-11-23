@@ -18,6 +18,7 @@ final class Settings
         'mail_from_name'       => 'Chatu Warehouse',
         'cron_key'             => '',
         'web_cron'             => '0',
+        'single_session'       => '1',     // core 1.1: signing in again ends the account's older session
         'max_upload_mb'        => '8',
         'over_receipt_pct'     => '0',     // receive up to this % more than ordered
         'adjust_auto_limit'    => '0',     // adjustments worth up to this post without a second person (0 = always a second person)

@@ -9,3 +9,7 @@ writable/session/*
 writable/debugbar/*
 writable/uploads/org*/
 build/
+writable/uploads/*
+!writable/uploads/index.html
+!writable/uploads/.htaccess
+writable/tmp/

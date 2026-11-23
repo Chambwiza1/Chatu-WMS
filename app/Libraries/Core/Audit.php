@@ -11,7 +11,7 @@ use Throwable;
  */
 final class Audit
 {
-    public const APP_VERSION = '0.2.0';
+    public const APP_VERSION = '0.2.1';
 
     public static function log(
         string $action,

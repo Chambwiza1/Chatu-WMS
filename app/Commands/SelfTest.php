@@ -110,6 +110,7 @@ class SelfTest extends BaseCommand
             }
         }
         \App\Libraries\Setup\Upgrade::v020($conn);
+        \App\Libraries\Setup\Upgrade::v021($conn);
         Seed::base();
         \App\Libraries\Master\Items::flush();
         return Demo::build();

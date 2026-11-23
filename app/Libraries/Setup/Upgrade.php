@@ -57,6 +57,12 @@ final class Upgrade
         self::q($db, 'ALTER TABLE ' . $p . 'so_lines MODIFY unit_price DECIMAL(18,4) NOT NULL DEFAULT 0');
     }
 
+    /** core 1.1 (0.2.1): one sign-in per account. */
+    public static function v021(BaseConnection $db): void
+    {
+        self::col($db, 'users', 'session_key', "CHAR(40) NULL COMMENT 'core 1.1: the current sign-in; older sessions end'");
+    }
+
     private static function col(BaseConnection $db, string $table, string $col, string $def): void
     {
         if (! $db->fieldExists($col, $table)) {

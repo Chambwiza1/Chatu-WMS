@@ -92,3 +92,21 @@ Server-side permission and warehouse checks on every action and page; refusals a
 ## 9. Tested
 
 `php spark wms:test --db chatuwms_test`: 37 acceptance tests (receiving and moves 8, transfers 5, sales and distribution 6, production and traceability 4, fleet, adjustments and counts 6, release 0.2 7, reconciliation self-test 1), each from a fresh demo company and each ending with the integrity check. Before release: every page was opened as each of the 14 demo and installed users (1,239 pages, no errors, no broken markup); the 0.1 flows and new 0.2 flows were driven through the real forms in a browser (a USD purchase order entered in bales and received at the rate on the day, a wave confirmed with a short pick, scanning a bin and a pack barcode into Find, item and receipt labels, the Chatu Assets vehicle import, the offline look-up with the network cut, and sign-out clearing the saved copy), ending with the integrity check: everything agrees. A 0.1 database was upgraded with `php spark migrate --all`, and a second run changed nothing.
+
+
+## Core 1.1 (23 November 2026)
+
+Shared with every ChatuERP product; see `claude/CHATUERP_CORE.md` in the project.
+
+- **One sign-in per account** (`Auth::sessionCurrent`, `storedKey`, `newKey`).
+  - Each sign-in writes a new `users.session_key` and keeps it in the session (`skey`).
+  - A session whose key is no longer the account's is ended at its next page, with a message.
+  - The setting `single_session` (on by default) switches the rule off.
+  - Before the database update has added the column, every session counts as current.
+  - A replaced sign-in is logged as `auth.session_replaced`.
+- **An expired form** (`App\Filters\CsrfFilter`, which wraps CodeIgniter's CSRF filter):
+  - on a page, it goes back with "That page had expired, so nothing was saved", or to sign-in when the session has ended;
+  - in the background, it answers 403 JSON `{ok:false, error, expired:true}`;
+  - it reads the session itself rather than `Auth`, because it runs before the organisation is known.
+- **`/health`** (`Cron::health`, no sign-in): 200 while the scheduled job is recent, otherwise 503, with the job's age and the version.
+- **Form rows** (`.row2`, `.row3`): each field spans three subgrid rows, so labels, boxes and hints line up across the row.

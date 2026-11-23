@@ -28,7 +28,7 @@ class Filters extends BaseFilters
         'auth'      => \App\Filters\AuthFilter::class,
         'installed' => \App\Filters\InstalledFilter::class,
         'csp'       => \App\Filters\CspFilter::class,
-        'csrf'          => CSRF::class,
+        'csrf'          => \App\Filters\CsrfFilter::class, // core 1.1: a plain message for an expired page
         'toolbar'       => DebugToolbar::class,
         'honeypot'      => Honeypot::class,
         'invalidchars'  => InvalidChars::class,

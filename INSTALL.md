@@ -30,7 +30,7 @@ Note the full names: cPanel adds your account name as a prefix (`account_wms`, `
 cPanel > **Select PHP Version** (or **MultiPHP Manager**): choose PHP 8.1 or newer. Under **Extensions**, make sure `intl`, `mbstring`, `mysqli` and `openssl` are ticked.
 
 ### 3. Upload the files
-Upload `chatu-warehouse-0.2.0.zip` with **File Manager** and choose **Extract**. Pick one of these layouts:
+Upload `chatu-warehouse-0.2.1.zip` with **File Manager** and choose **Extract**. Pick one of these layouts:
 
 **Recommended: a subdomain pointing at `public/`**
 1. Extract to your home folder, giving `/home/ACCOUNT/chatuwarehouse`.
@@ -93,7 +93,7 @@ sudo mysql -e "CREATE DATABASE chatuwms CHARACTER SET utf8mb4 COLLATE utf8mb4_un
 
 ### 3. Files
 ```bash
-cd /var/www && sudo unzip /path/to/chatu-warehouse-0.2.0.zip
+cd /var/www && sudo unzip /path/to/chatu-warehouse-0.2.1.zip
 sudo chown -R www-data:www-data /var/www/chatuwarehouse/writable
 sudo touch /var/www/chatuwarehouse/.env && sudo chown www-data:www-data /var/www/chatuwarehouse/.env
 ```
