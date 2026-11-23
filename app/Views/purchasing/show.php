@@ -1,0 +1,21 @@
+<?= $this->extend('layout') ?>
+<?= $this->section('content') ?>
+<?php $wh = (int) $po['warehouse_id']; $total = 0 ?>
+<div class="page-head"><div><h1>Purchase order <?= esc($po['number']) ?> <?= badge($po['status']) ?></h1><p class="sub"><?= esc($po['supplier']) ?> · deliver to <?= esc($po['wh'] . ' ' . $po['wh_name']) ?></p></div>
+<div class="actions no-print">
+<?php if ($po['status'] === 'draft' && can('purchase.manage', $wh)): ?><a class="btn secondary" href="<?= site_url('purchase-orders/' . $po['id'] . '/edit') ?>">Edit</a><form method="post" action="<?= site_url('purchase-orders/' . $po['id'] . '/issue') ?>" class="inline"><?= csrf_field() ?><button class="btn" type="submit">Issue</button></form><?php endif ?>
+<?php if (in_array($po['status'], ['open', 'partly_received'], true) && can('receive.post', $wh)): ?><a class="btn" href="<?= site_url('receipts/new?po=' . $po['id']) ?>">Receive goods</a><?php endif ?>
+<button class="btn secondary" data-print>Print</button></div></div>
+<section class="panel"><dl class="facts"><dt>Ordered</dt><dd><?= nice_date($po['order_date']) ?> by <?= esc($po['created_name']) ?></dd><dt>Expected</dt><dd><?= nice_date($po['expected_date']) ?: 'not given' ?></dd>
+<?php if ($po['currency'] !== '' || (float) $po['landed_pct'] > 0): ?><dt>Costs</dt><dd><?= $po['currency'] !== '' ? 'In ' . esc($po['currency']) . ' at ' . (float) $po['fx_rate'] . ' ' . esc(\App\Libraries\Master\Fx::home()) . ' each' : 'In ' . esc(\App\Libraries\Master\Fx::home()) ?><?= (float) $po['landed_pct'] > 0 ? ', plus ' . (float) $po['landed_pct'] . '% landed cost' : '' ?></dd><?php endif ?>
+<?php if ($po['supplier_ref']): ?><dt>Supplier reference</dt><dd><?= esc($po['supplier_ref']) ?></dd><?php endif ?>
+<?php if ($contact = implode(', ', array_filter([$po['supplier_phone'], $po['supplier_email'], $po['supplier_address']]))): ?><dt>Supplier</dt><dd><?= esc($contact) ?></dd><?php endif ?>
+<?php if ($po['notes']): ?><dt>Notes</dt><dd><?= nl2br(esc($po['notes'])) ?></dd><?php endif ?></dl></section>
+<div class="table-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="num">Ordered</th><th class="num">Received</th><th class="num">Still due</th><th class="num">Unit cost</th><th class="num">Amount</th></tr></thead><tbody>
+<?php foreach ($lines as $l): $total += (float) $l['qty_ordered'] * (float) $l['unit_cost'] ?><tr><td class="mono"><?= esc($l['sku']) ?></td><td><?= esc($l['name']) ?></td><td class="num"><?= qty($l['qty_ordered'], (int) $l['decimals']) ?> <?= esc($l['uom']) ?><?= pack_hint($l['qty_ordered'], $l['pack_unit'], $l['pack_factor']) ?></td><td class="num"><?= qty($l['qty_received'], (int) $l['decimals']) ?></td><td class="num"><?= qty(max(0, (float) $l['qty_ordered'] - (float) $l['qty_received']), (int) $l['decimals']) ?></td><td class="num"><?= number_format((float) $l['unit_cost'], 2) ?></td><td class="num"><?= number_format((float) $l['qty_ordered'] * (float) $l['unit_cost'], 2) ?></td></tr><?php endforeach ?>
+</tbody><tfoot><tr><td colspan="6">Total</td><td class="num"><?= \App\Libraries\Master\Fx::money($total, $po['currency']) ?></td></tr><?php if ($po['currency'] !== '' || (float) $po['landed_pct'] > 0): ?><tr><td colspan="6">Stock value at this rate<?= (float) $po['landed_pct'] > 0 ? ' with landed cost' : '' ?></td><td class="num"><?= money(\App\Libraries\Master\Fx::toHome($total, (float) $po['fx_rate'], (float) $po['landed_pct'])) ?></td></tr><?php endif ?></tfoot></table></div>
+<?php if ($receipts): ?><h2>Receipts</h2><ul><?php foreach ($receipts as $r): ?><li><a href="<?= site_url('receipts/' . $r['id']) ?>"><?= esc($r['number']) ?></a> on <?= nice_date($r['received_on']) ?></li><?php endforeach ?></ul><?php endif ?>
+<?php if (in_array($po['status'], ['draft', 'open', 'partly_received'], true) && can('purchase.manage', $wh)): ?>
+<details class="no-print"><summary><?= $po['status'] === 'partly_received' ? 'Close the order (the rest will not come)' : 'Cancel the order' ?></summary>
+<form method="post" action="<?= site_url('purchase-orders/' . $po['id'] . '/close') ?>" class="inline-form"><?= csrf_field() ?><input name="why" placeholder="Why" required><button class="btn danger small" type="submit">Confirm</button></form></details><?php endif ?>
+<?= $this->endSection() ?>

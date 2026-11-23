@@ -1,0 +1,9 @@
+<?= $this->extend('layout') ?>
+<?= $this->section('content') ?>
+<div class="page-head"><div><h1>Pick, pack, dispatch</h1><p class="sub"><?= esc(wh_name($wh)) ?></p></div><div class="actions"><a class="btn secondary" href="<?= site_url('waves') ?>">Wave picking</a><a class="btn secondary" href="<?= site_url('orders?status=to_pick') ?>">Orders to pick</a><?php if (can('fleet.manage')): ?><a class="btn secondary" href="<?= site_url('fleet/trips/new') ?>">Plan a trip</a><?php endif ?></div></div>
+<div class="pill-filter"><?php foreach (['open' => 'Being prepared', 'allocated' => 'To pick', 'picked' => 'To pack', 'packed' => 'To dispatch', 'dispatched' => 'On the way', 'delivered' => 'Delivered', 'failed' => 'Failed', 'all' => 'All'] as $k => $l): ?><a href="<?= site_url('shipments?status=' . $k) ?>" class="<?= $st === $k ? 'on' : '' ?>"><?= $l ?></a><?php endforeach ?></div>
+<?php if (! $rows): ?><div class="panel empty">Nothing here.</div><?php else: ?>
+<div class="table-wrap"><table><thead><tr><th>Shipment</th><th>Order</th><th>Customer</th><th>Town</th><th>Packages</th><th>Trip</th><th>Status</th><th>Since</th></tr></thead><tbody>
+<?php foreach ($rows as $s): ?><tr><td><a href="<?= site_url('shipments/' . $s['id']) ?>"><?= esc($s['number']) ?></a></td><td><?= esc($s['order_no']) ?></td><td><?= esc($s['customer']) ?></td><td><?= esc($s['town']) ?></td><td><?= (int) $s['packages'] ?: '' ?></td><td><?= $s['trip_no'] ? '<a href="' . site_url('fleet/trips/' . $s['trip_id']) . '">' . esc($s['trip_no']) . '</a>' : '' ?></td><td><?= badge($s['status']) ?></td><td><?= local_time($s['delivered_at'] ?? $s['dispatched_at'] ?? $s['packed_at'] ?? $s['picked_at'] ?? $s['created_at'], 'j M H:i') ?></td></tr><?php endforeach ?>
+</tbody></table></div><?php endif ?>
+<?= $this->endSection() ?>

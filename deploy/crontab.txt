@@ -1,0 +1,4 @@
+# Scheduled jobs (reminders, escalations, expiry, e-mail, periods, nightly integrity check).
+# Linux:   crontab -u www-data -e   and add the line below (adjust the path).
+# cPanel:  Cron Jobs > Once Per Five Minutes > Command: php /home/ACCOUNT/chatuwarehouse/spark wms:cron
+*/5 * * * * php /var/www/chatuwarehouse/spark wms:cron >/dev/null 2>&1

@@ -1,0 +1,21 @@
+# Chatu Assets - for cPanel when the whole application was uploaded into public_html
+# (or into a sub-folder of it). Everything is sent to the public/ folder, so the
+# application code, settings (.env) and data (writable/) can never be downloaded.
+# Better still: point the domain's document root at the public/ folder
+# (cPanel > Domains > Manage) and this file is not used.
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^public/ - [L]
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    # Without mod_rewrite nothing here may be served
+    Require all denied
+</IfModule>
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>

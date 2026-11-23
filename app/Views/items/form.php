@@ -1,0 +1,40 @@
+<?= $this->extend('layout') ?>
+<?= $this->section('content') ?>
+<?php $v = static fn ($k, $d = '') => old($k, $item[$k] ?? $d) ?>
+<div class="page-head"><div><h1><?= $item ? 'Edit ' . esc($item['sku']) : 'New item' ?></h1></div></div>
+<form method="post" action="<?= site_url($item ? 'items/' . $item['id'] : 'items') ?>" class="stack panel wide"><?= csrf_field() ?>
+<div class="row2"><div class="field"><label for="sku">Item code</label><input id="sku" name="sku" value="<?= esc($v('sku')) ?>" required maxlength="40" class="upper"></div>
+<div class="field"><label for="barcode">Barcode</label><input id="barcode" name="barcode" value="<?= esc($v('barcode')) ?>" maxlength="60"><span class="hint">Scanning this finds the item too.</span></div></div>
+<div class="field"><label for="name">Name</label><input id="name" name="name" value="<?= esc($v('name')) ?>" required maxlength="150"></div>
+<div class="field"><label for="description">Description</label><textarea id="description" name="description" maxlength="500"><?= esc($v('description')) ?></textarea></div>
+<div class="row2"><div class="field"><label for="kind">Kind</label><select id="kind" name="kind"><?php foreach (\App\Libraries\Master\Items::KINDS as $k => $l): ?><option value="<?= $k ?>" <?= $v('kind', 'goods') === $k ? 'selected' : '' ?>><?= esc($l) ?></option><?php endforeach ?></select></div>
+<div class="field"><label for="category_id">Category</label><select id="category_id" name="category_id"><option value="">None</option><?php foreach ($cats as $c): ?><option value="<?= $c['id'] ?>" <?= (string) $v('category_id') === (string) $c['id'] ? 'selected' : '' ?>><?= esc($c['name']) ?></option><?php endforeach ?></select><input name="new_category" placeholder="or type a new category" maxlength="100"></div></div>
+<fieldset><legend>Counting and tracking</legend>
+<?php if ($locked): ?><p class="note">This item already has stock movements, so its tracking cannot change and its decimals cannot go down.</p><?php endif ?>
+<div class="row2"><div class="field"><label for="uom">Unit</label><input id="uom" name="uom" value="<?= esc($v('uom', 'each')) ?>" maxlength="12" required><span class="hint">each, bag, carton, kg, litre ...</span></div>
+<div class="field"><label for="decimals">Decimals</label><select id="decimals" name="decimals"><?php foreach ([0 => 'Whole units', 1 => '1', 2 => '2', 3 => '3 (kg, litres)'] as $k => $l): ?><option value="<?= $k ?>" <?= (int) $v('decimals', 0) === $k ? 'selected' : '' ?>><?= $l ?></option><?php endforeach ?></select></div></div>
+<div class="row2"><div class="field"><label for="tracking">Tracking</label><select id="tracking" name="tracking" <?= $locked ? 'disabled' : '' ?>><?php foreach (\App\Libraries\Master\Items::TRACKING as $k => $l): ?><option value="<?= $k ?>" <?= $v('tracking', 'none') === $k ? 'selected' : '' ?>><?= esc($l) ?></option><?php endforeach ?></select><?php if ($locked): ?><input type="hidden" name="tracking" value="<?= esc($item['tracking']) ?>"><?php endif ?></div>
+<div class="field"><label class="check"><input type="checkbox" name="expiry_required" value="1" <?= $v('expiry_required') ? 'checked' : '' ?>> Batches have expiry dates</label><span class="hint">Needs batch tracking. Expired batches cannot be picked, transferred or used.</span></div></div>
+<div class="row2"><div class="field"><label for="shelf_life_days">Shelf life (days)</label><input id="shelf_life_days" name="shelf_life_days" type="number" min="0" value="<?= esc($v('shelf_life_days')) ?>"><span class="hint">Production sets the expiry date from this.</span></div>
+<div class="field"><label for="min_shelf_days">Minimum days left to dispatch</label><input id="min_shelf_days" name="min_shelf_days" type="number" min="0" value="<?= esc($v('min_shelf_days', 0)) ?>"></div></div>
+<div class="field"><label for="pick_policy">Picking order</label><select id="pick_policy" name="pick_policy"><option value="">As the warehouse</option><option value="fefo" <?= $v('pick_policy') === 'fefo' ? 'selected' : '' ?>>Earliest expiry first (FEFO)</option><option value="fifo" <?= $v('pick_policy') === 'fifo' ? 'selected' : '' ?>>Oldest batch first (FIFO)</option></select></div>
+</fieldset>
+<fieldset><legend>Packs</legend>
+<p class="muted small">Stock is always kept in the unit above. Add the packs you buy or sell in (a carton of 12, a pallet of 720) and documents can be entered in them; they are converted to units. A pack can have its own barcode: scanning it enters one pack.</p>
+<?php $us = old('units') ?: array_map(static fn ($u) => ['name' => $u['name'], 'factor' => (float) $u['factor'], 'barcode' => $u['barcode'], 'buy_default' => $u['buy_default'], 'sell_default' => $u['sell_default']], $units); $us[] = []; ?>
+<div class="table-wrap"><table class="lines" id="unit-lines"><thead><tr><th>Pack</th><th>Holds (units)</th><th>Barcode</th><th>Buy in it</th><th>Sell in it</th><th></th></tr></thead><tbody>
+<?php foreach ($us as $n => $u): ?><tr><td><input name="units[<?= $n ?>][name]" value="<?= esc($u['name'] ?? '') ?>" placeholder="carton" aria-label="Pack name"></td><td><input class="n" type="number" step="any" min="0" name="units[<?= $n ?>][factor]" value="<?= esc($u['factor'] ?? '') ?>" aria-label="Units in the pack"></td><td><input name="units[<?= $n ?>][barcode]" value="<?= esc($u['barcode'] ?? '') ?>" aria-label="Pack barcode"></td>
+<td><input type="checkbox" name="units[<?= $n ?>][buy_default]" value="1" <?= ! empty($u['buy_default']) ? 'checked' : '' ?> aria-label="Default for buying"></td><td><input type="checkbox" name="units[<?= $n ?>][sell_default]" value="1" <?= ! empty($u['sell_default']) ? 'checked' : '' ?> aria-label="Default for selling"></td><td><button class="btn small secondary" data-remove-line type="button">Remove</button></td></tr><?php endforeach ?>
+</tbody><template><tr><td><input name="units[__N__][name]" placeholder="pallet" aria-label="Pack name"></td><td><input class="n" type="number" step="any" min="0" name="units[__N__][factor]" aria-label="Units in the pack"></td><td><input name="units[__N__][barcode]" aria-label="Pack barcode"></td><td><input type="checkbox" name="units[__N__][buy_default]" value="1" aria-label="Default for buying"></td><td><input type="checkbox" name="units[__N__][sell_default]" value="1" aria-label="Default for selling"></td><td><button class="btn small secondary" data-remove-line type="button">Remove</button></td></tr></template></table></div>
+<div class="line-actions"><button class="btn small secondary" type="button" data-add-line="#unit-lines">Add a pack</button></div>
+</fieldset>
+<fieldset><legend>Size, reordering and price</legend>
+<div class="row2"><div class="field"><label for="weight_kg">Weight per unit (kg)</label><input id="weight_kg" name="weight_kg" type="number" step="any" min="0" value="<?= esc($v('weight_kg')) ?>"><span class="hint">Used for vehicle loads.</span></div>
+<div class="field"><label for="volume_m3">Volume per unit (m³)</label><input id="volume_m3" name="volume_m3" type="number" step="any" min="0" value="<?= esc($v('volume_m3')) ?>"></div></div>
+<div class="row2"><div class="field"><label for="reorder_level">Reorder level</label><input id="reorder_level" name="reorder_level" type="number" step="any" min="0" value="<?= esc($v('reorder_level', 0)) ?>"></div>
+<div class="field"><label for="reorder_qty">Usual order quantity</label><input id="reorder_qty" name="reorder_qty" type="number" step="any" min="0" value="<?= esc($v('reorder_qty', 0)) ?>"></div></div>
+<div class="field"><label for="sell_price">Selling price</label><input id="sell_price" name="sell_price" type="number" step="0.01" min="0" value="<?= esc($v('sell_price', 0)) ?>"><span class="hint">Default price on sales orders (for the invoicing export).</span></div>
+</fieldset>
+<?php if ($item): ?><label class="check"><input type="checkbox" name="active" value="1" <?= $item['active'] ? 'checked' : '' ?>> Active</label><?php endif ?>
+<div><button class="btn" type="submit">Save item</button> <a class="btn secondary" href="<?= site_url('items') ?>">Cancel</a></div></form>
+<?= $this->endSection() ?>

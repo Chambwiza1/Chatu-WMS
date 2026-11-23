@@ -1,0 +1,7 @@
+<?= $this->extend('layout') ?>
+<?= $this->section('content') ?>
+<div class="page-head"><div><h1>Trips</h1></div><div class="actions"><?php if (can('fleet.manage')): ?><a class="btn" href="<?= site_url('fleet/trips/new') ?>">Plan a trip</a><?php endif ?></div></div>
+<div class="pill-filter"><?php foreach (['' => 'All', 'planned' => 'Planned', 'on_road' => 'On the road', 'completed' => 'Completed', 'cancelled' => 'Cancelled'] as $k => $l): ?><a href="<?= site_url('fleet/trips' . ($k !== '' ? '?status=' . $k : '')) ?>" class="<?= $st === $k ? 'on' : '' ?>"><?= $l ?></a><?php endforeach ?></div>
+<?php if (! $rows): ?><div class="panel empty">No trips.</div><?php else: ?><div class="table-wrap"><table><thead><tr><th>Trip</th><th>Date</th><th>From</th><th>Vehicle</th><th>Driver</th><th class="num">Stops</th><th class="num">Km</th><th>Status</th></tr></thead><tbody>
+<?php foreach ($rows as $t): ?><tr><td><a href="<?= site_url('fleet/trips/' . $t['id']) ?>"><?= esc($t['number']) ?></a></td><td><?= nice_date($t['planned_date']) ?></td><td><?= esc($t['wh']) ?></td><td><?= esc($t['reg_no']) ?></td><td><?= esc($t['driver']) ?></td><td class="num"><?= (int) $t['stops'] ?></td><td class="num"><?= $t['odometer_in'] ? number_format((int) $t['odometer_in'] - (int) $t['odometer_out']) : '' ?></td><td><?= badge($t['status']) ?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
+<?= $this->endSection() ?>

@@ -1,0 +1,42 @@
+# Chatu Assets - web server rules (Apache, also used on cPanel)
+Options -Indexes
+DirectoryIndex index.php
+
+<IfModule mod_rewrite.c>
+    # +FollowSymlinks is refused by many shared hosts; this one is allowed
+    Options +SymLinksIfOwnerMatch
+    RewriteEngine On
+    # If the app lives in a sub-folder and links break, uncomment and set it:
+    # RewriteBase /assets/
+
+    # pass the Authorization header through
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # everything that is not a real file goes to the application
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^([\s\S]*)$ index.php/$1 [L,NC,QSA]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    ErrorDocument 404 index.php
+</IfModule>
+
+<IfModule mod_headers.c>
+    # the service worker and manifest must always be checked for updates
+    <FilesMatch "^(sw\.js|manifest\.webmanifest)$">
+        Header set Cache-Control "no-cache"
+    </FilesMatch>
+    <FilesMatch "\.(css|js|svg|png)$">
+        Header set Cache-Control "public, max-age=604800"
+    </FilesMatch>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
+
+<IfModule mod_mime.c>
+    AddType application/manifest+json .webmanifest
+    AddType application/javascript .js
+</IfModule>
+
+ServerSignature Off

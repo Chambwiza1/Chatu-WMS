@@ -1,0 +1,18 @@
+<?= $this->extend('layout') ?>
+<?= $this->section('content') ?>
+<div class="page-head"><div><h1><?= esc($u['name']) ?> <?= $u['active'] ? '' : '<span class="badge quiet">Off</span>' ?></h1><p class="sub"><?= esc($u['username']) ?><?= $u['position'] ? ' · ' . esc($u['position']) : '' ?></p></div></div>
+<?php if ($conflicts): ?><div class="flash err">Segregation of duties: <?= esc(implode('; ', array_map(static fn ($c) => $c['description'] . ' (' . $c['a_name'] . ' and ' . $c['b_name'] . ')', $conflicts))) ?></div><?php endif ?>
+<div class="split2"><section><h2>Roles</h2>
+<?php if (! $roles): ?><div class="panel empty">No roles: this person can sign in but do nothing.</div><?php else: ?><div class="table-wrap"><table><thead><tr><th>Role</th><th>Where</th><th></th></tr></thead><tbody>
+<?php foreach ($roles as $r): ?><tr><td><?= esc($r['name']) ?></td><td><?= $r['scope_type'] === 'system' ? 'Whole company' : esc($r['wh_code'] . ' ' . $r['wh_name']) ?></td><td><form method="post" action="<?= site_url('admin/roles/' . $r['id'] . '/revoke') ?>" class="inline"><?= csrf_field() ?><button class="btn small secondary" type="submit" data-confirm="Remove this role?">Remove</button></form></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
+<form method="post" action="<?= site_url('admin/users/' . $u['id'] . '/grant') ?>" class="panel stack"><?= csrf_field() ?><h3>Give a role</h3>
+<div class="row2"><div class="field"><label for="role">Role</label><select id="role" name="role"><?php foreach ($allRoles as $r): ?><option value="<?= esc($r['code']) ?>"><?= esc($r['name']) ?></option><?php endforeach ?></select></div>
+<div class="field"><label for="scope">Where</label><select id="scope" name="scope"><option value="system">Whole company</option><?php foreach ($warehouses as $w): ?><option value="<?= $w['id'] ?>"><?= esc($w['code'] . ' ' . $w['name']) ?></option><?php endforeach ?></select></div></div>
+<div><button class="btn" type="submit">Give role</button></div></form></section>
+<div><form method="post" action="<?= site_url('admin/users/' . $u['id']) ?>" class="panel stack"><?= csrf_field() ?><h2>Details</h2>
+<div class="field"><label for="name">Name</label><input id="name" name="name" value="<?= esc($u['name']) ?>"></div><div class="field"><label for="position">Position</label><input id="position" name="position" value="<?= esc($u['position']) ?>"></div>
+<div class="field"><label for="email">E-mail</label><input id="email" type="email" name="email" value="<?= esc($u['email']) ?>"></div><div class="field"><label for="phone">Phone</label><input id="phone" name="phone" value="<?= esc($u['phone']) ?>"></div>
+<div><button class="btn secondary" type="submit">Save</button></div></form>
+<form method="post" action="<?= site_url('admin/users/' . $u['id']) ?>" class="panel stack"><?= csrf_field() ?><input type="hidden" name="do" value="password"><h2>New password</h2><div class="field"><label for="password">Password</label><input id="password" type="password" name="password" minlength="10" required autocomplete="new-password"></div><div><button class="btn secondary" type="submit">Set password</button></div></form>
+<form method="post" action="<?= site_url('admin/users/' . $u['id']) ?>" class="panel"><?= csrf_field() ?><input type="hidden" name="do" value="<?= $u['active'] ? 'deactivate' : 'activate' ?>"><button class="btn <?= $u['active'] ? 'danger' : '' ?>" type="submit"><?= $u['active'] ? 'Switch off the account' : 'Switch the account on' ?></button><p class="muted small">Switched-off accounts cannot sign in. Their history stays.</p></form></div></div>
+<?= $this->endSection() ?>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta name="theme-color" content="#0b3a1b">
+<title>Offline look-up - Chatu Warehouse</title>
+<link rel="icon" href="static/brand/favicon-64.png" type="image/png">
+<link rel="stylesheet" href="static/app.css?v=0.2.0">
+<script src="static/app.js?v=0.2.0" defer></script>
+<script src="static/offline.js?v=0.2.0" defer></script>
+</head>
+<body class="offline-page" data-base="." data-offline-page>
+<header class="offline-head"><a href="./" class="brand-link"><img src="static/brand/logo-wide.png" alt="Chatu Innovations" width="93" height="34"></a><span>Chatu Warehouse · offline look-up</span></header>
+<main class="main offline-main">
+<div class="page-head"><div><h1>Look up stock</h1><p class="sub" id="snap-status">Loading the saved stock list…</p></div><div class="actions"><a class="btn secondary" href="./">Back to the app</a></div></div>
+<form id="off-form" class="inline-form" role="search"><label class="sr" for="off-q">Find</label><input id="off-q" type="search" placeholder="Scan or type: item, pack, bin, batch, serial" autocomplete="off" autofocus><button class="btn" type="submit">Find</button></form>
+<div class="scan-box" data-scanner data-target="#off-q" data-submit="#off-form"><button class="btn secondary small" type="button" data-scan-start>Scan with camera</button><video playsinline muted hidden></video><p class="muted small" data-scan-status></p></div>
+<div id="off-results"></div>
+<p class="muted small gap-top">This page answers from the list your browser saved the last time you were signed in and online. Quantities may have changed since. Nothing can be posted from here; record movements when you are back online.</p>
+</main>
+<footer class="site-foot"><img class="foot-logo" src="static/brand/logo-wide.png" alt="Chatu Innovations" width="93" height="34"><span>Chatu Warehouse by Chatu Innovations · +260 773818370 · +260 979913497 · www.chatuzm.com</span></footer>
+</body>
+</html>
