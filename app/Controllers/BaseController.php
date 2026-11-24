@@ -55,6 +55,9 @@ abstract class BaseController extends Controller
     {
         $uid  = Auth::id();
         $mine = [];
+        if ($uid && strtolower($this->request->getMethod()) === 'get') {
+            Notify::seenRecord($uid, (string) $this->request->getPath()); // core 1.1 (E2): the page of one record reads the messages about it
+        }
         if ($uid && Tenancy::id() !== null) {
             $ids  = array_values(array_unique(array_merge(...array_map(static fn ($p) => Access::warehouses($p), ['stock.view', 'receive.post', 'dispatch.manage', 'warehouse.setup']))));
             $mine = $ids ? Db::rows('SELECT id, code, name FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code') : [];
@@ -127,6 +130,9 @@ abstract class BaseController extends Controller
     /** Check a permission inside a GET page and render 403 when missing. */
     protected function need(string $perm, ?int $warehouseId = null): ?ResponseInterface
     {
+        if ($warehouseId && Tenancy::id() !== null && ! Db::value('SELECT 1 FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [$warehouseId])) {
+            return $this->notFound('Warehouse'); // core 1.1: another organisation's warehouse is "not found", never "not yours"
+        }
         $ok = $warehouseId ? Access::canAt($warehouseId, $perm) : Access::can($perm);
         if (! $ok) {
             Audit::denied('http.get ' . $this->request->getUri()->getPath(), 'Missing permission ' . $perm);

@@ -59,7 +59,7 @@ final class Roles
         $tid  = Tenancy::require();
         $name = trim((string) ($d['name'] ?? ''));
         if ($name === '') {
-            throw new BizException('Give the role a name, for example "Head waiter".');
+            throw new BizException('Give the role a name, for example "Shift supervisor".');
         }
         $perms = array_values(array_unique(array_map('strval', (array) ($d['perms'] ?? []))));
         foreach ($perms as $p) {
@@ -82,7 +82,9 @@ final class Roles
                 Db::exec('DELETE FROM {role_permissions} WHERE role_id = ?', [$id]);
                 $before = ['name' => $old['name'], 'description' => $old['description'], 'perms' => $old['perms']];
             } else {
-                $id     = Db::insert('roles', ['tenant_id' => $tid, 'code' => 'r' . bin2hex(random_bytes(5)), 'name' => mb_substr($name, 0, 100), 'description' => $desc, 'level' => 'tenant', 'rank_level' => 2]);
+                // a copy keeps the template it came from, so the duties kept apart (sod_rules) still hold for it
+                $tpl    = isset($d['template']) && is_string($d['template']) && $d['template'] !== '' ? $d['template'] : null;
+                $id     = Db::insert('roles', ['tenant_id' => $tid, 'code' => 'r' . bin2hex(random_bytes(5)), 'name' => mb_substr($name, 0, 100), 'description' => $desc, 'level' => 'tenant', 'rank_level' => 2, 'template' => $tpl]);
                 $before = null;
             }
             foreach ($perms as $p) {
@@ -98,7 +100,8 @@ final class Roles
     public static function copy(int $id, string $name = ''): int
     {
         $r = self::get($id);
-        return self::save(['name' => trim($name) ?: 'Copy of ' . $r['name'], 'description' => $r['description'], 'perms' => $r['perms']]);
+        $tpl = Db::value('SELECT template FROM {roles} WHERE tenant_id = ? AND id = ?', [Tenancy::require(), $id]);
+        return self::save(['name' => trim($name) ?: 'Copy of ' . $r['name'], 'description' => $r['description'], 'perms' => $r['perms'], 'template' => $tpl]);
     }
 
     /** Delete a role nobody holds. */

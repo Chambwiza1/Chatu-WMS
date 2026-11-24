@@ -21,6 +21,9 @@ final class Parties
             throw new BizException('Unknown list.');
         }
         Access::requireSave($table === 'suppliers' ? 'supplier' : 'customer', $id === null, $id !== null && isset($d['active']) && ! $d['active']);
+        if ($id !== null) {
+            self::get($table, $id); // another organisation's record is "not found"
+        }
         $code = strtoupper(trim((string) ($d['code'] ?? '')));
         if (! preg_match('/^[A-Z0-9._-]{1,30}$/', $code)) {
             throw new BizException('Code: letters, numbers, dot and dash; up to 30 characters.');

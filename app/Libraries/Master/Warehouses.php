@@ -69,8 +69,8 @@ final class Warehouses
 
     public static function update(int $id, array $d): void
     {
+        $w = self::get($id); // another organisation's warehouse is "not found", not "not yours"
         Access::requireAt($id, 'warehouse.setup');
-        $w = self::get($id);
         $row = [
             'name' => trim((string) ($d['name'] ?? $w['name'])) ?: $w['name'],
             'kind' => in_array($d['kind'] ?? '', ['warehouse', 'depot', 'factory', 'store'], true) ? $d['kind'] : $w['kind'],

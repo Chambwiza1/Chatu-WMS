@@ -205,6 +205,9 @@ final class Items
     public static function save(array $d, ?int $id = null): int
     {
         Access::requireSave('item', $id === null, $id !== null && isset($d['active']) && ! $d['active']);
+        if ($id !== null) {
+            self::get($id); // another organisation's item is "not found" before anything else is checked
+        }
         $sku = strtoupper(trim((string) ($d['sku'] ?? '')));
         if ($sku === '' || ! preg_match('/^[A-Z0-9._\/-]{1,40}$/', $sku)) {
             throw new BizException('Item code: letters, numbers, dot, dash, slash; up to 40 characters.');

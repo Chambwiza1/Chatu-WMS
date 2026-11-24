@@ -94,7 +94,7 @@ $active = static function (string $href) use ($path): bool {
         </select>
       </form>
     <?php endif ?>
-    <?php if (count($warehouses) > 1): ?>
+    <?php $warehouses ??= []; $whId ??= 0; if (count($warehouses) > 1): ?>
       <form method="post" action="<?= site_url('warehouse/switch') ?>" class="entity-switch">
         <?= csrf_field() ?>
         <label class="sr" for="wh-select">Warehouse</label>
@@ -106,7 +106,7 @@ $active = static function (string $href) use ($path): bool {
       </form>
     <?php endif ?>
     <nav class="topnav" aria-label="Account">
-      <a href="<?= site_url('notifications') ?>" class="bell<?= $unread ? ' has-unread' : '' ?>">Messages<?= $unread ? ' <span class="count">' . $unread . '</span>' : '' ?></a>
+      <a href="<?= site_url('notifications') ?>" class="bell<?= ($unread ??= 0) ? ' has-unread' : '' ?>">Messages<?= $unread ? ' <span class="count">' . $unread . '</span>' : '' ?></a>
       <a href="<?= site_url('account') ?>"><?= esc($me['name']) ?></a>
       <form method="post" action="<?= site_url('logout') ?>" class="inline"><?= csrf_field() ?><button class="linkish" type="submit">Sign out</button></form>
     </nav>
