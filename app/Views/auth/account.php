@@ -3,7 +3,8 @@
 <div class="page-head"><div><h1><?= esc($me['name']) ?></h1><p class="sub"><?= esc($me['username']) ?><?= $me['position'] ? ' · ' . esc($me['position']) : '' ?></p></div></div>
 <div class="cols">
 <section class="panel"><h2>What you may do</h2>
-<?php if (! $roles): ?><p class="muted">No roles yet. Ask the administrator.</p><?php else: ?><ul><?php foreach ($roles as $r): ?><li><b><?= esc($r['name']) ?></b>, <?= $r['scope_type'] === 'system' ? 'whole company' : esc($r['wh_code'] . ' ' . $r['wh_name']) ?></li><?php endforeach ?></ul><?php endif ?></section>
+<?php if (! $roles): ?><p class="muted">No roles<?= $org ? ' in ' . esc($org['name']) : '' ?>. Ask the administrator.</p><?php else: ?><ul><?php foreach ($roles as $r): ?><li><b><?= esc($r['name']) ?></b><?= $r['scope_type'] === 'platform' ? ' (platform)' : '' ?></li><?php endforeach ?></ul><?php endif ?>
+<?php if ($org): ?><p class="small">Warehouses: <?= $wh['all'] ? 'all of them' : (esc(implode(', ', $whCodes)) ?: '<span class="bad-text">none yet</span>') ?>.</p><?php endif ?></section>
 <section class="panel"><h2>Change your password</h2>
 <form method="post" action="<?= site_url('account/password') ?>" class="stack"><?= csrf_field() ?>
 <div class="field"><label for="current">Current password</label><input id="current" name="current" type="password" autocomplete="current-password" required></div>

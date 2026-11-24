@@ -59,7 +59,7 @@ final class Dashboard
             $n = (int) Db::value("SELECT COUNT(*) FROM {purchase_orders} WHERE tenant_id = {tid} AND status IN ('open','partly_received') AND expected_date < CURDATE() AND warehouse_id IN ($w)");
             $out[] = [$n, 'Purchase orders overdue', 'Expected date has passed', '/purchase-orders?status=overdue', $n ? 'warn' : ''];
         }
-        if (Access::can('fleet.manage')) {
+        if (Access::can('fleet.manage') && \App\Libraries\Platform\Modules::on('fleet')) {
             $exp = Fleet::expiring();
             $bad = count(array_filter($exp, static fn ($e) => $e['overdue']));
             $out[] = [count($exp), 'Fleet papers and services', $bad ? $bad . ' already overdue' : 'Within ' . Settings::get('fleet_warn_days') . ' days', '/fleet', $bad ? 'bad' : (count($exp) ? 'warn' : '')];

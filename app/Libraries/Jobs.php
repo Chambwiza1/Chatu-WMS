@@ -2,9 +2,10 @@
 
 namespace App\Libraries;
 
-use App\Libraries\Core\Access;
 use App\Libraries\Core\Db;
 use App\Libraries\Core\Settings;
+use App\Libraries\Core\Tenancy;
+use App\Libraries\Reports\Integrity;
 use App\Libraries\Fleet\Fleet;
 use App\Libraries\Reports\Reconcile;
 use App\Libraries\Workflow\Notify;
@@ -16,32 +17,54 @@ use Throwable;
  */
 final class Jobs
 {
+    public const BUDGET_SECONDS = 45;
+
     public static function run(): array
     {
         $got = (int) Db::value('SELECT GET_LOCK(?, 0)', [Db::t('cron')]);
         if (! $got) {
             return ['skipped' => 'Another run is in progress.'];
         }
+        $start = microtime(true);
         $logId = Db::insert('jobs_log', ['job' => 'cron', 'started_at' => Db::now()]);
         $out   = [];
         try {
-            $out['emails'] = Notify::sendEmails();
-            Db::exec('DELETE FROM {op_tokens} WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
-            $last = json_decode((string) Settings::get('last_reconcile'), true);
-            if (! $last || strtotime($last['at'] . ' UTC') < time() - 20 * 3600) {
-                $res      = Reconcile::run();
-                $problems = array_sum(array_map('count', $res));
-                $out['reconcile'] = $problems;
-                if ($problems) {
-                    Notify::holders('admin.settings', null, 'integrity', 'The integrity check found ' . $problems . ' problem(s)', null, '/admin/reconcile');
+            Tenancy::run(null, static function () use (&$out, $start) {
+                $out['emails'] = Notify::sendEmails();
+                Db::exec('DELETE FROM {op_tokens} WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
+                // core 1.5: online payments still waiting are checked; once a day, trials and overdue invoices
+                $out['payments'] = \App\Libraries\Platform\Pay::reconcile()['settled'];
+                if (Settings::get('billing_daily_on') !== date('Y-m-d')) {
+                    Settings::set('billing_daily_on', date('Y-m-d'));
+                    $out['billing'] = array_sum(\App\Libraries\Platform\Billing::daily());
                 }
-            }
-            if (Settings::get('last_daily') !== date('Y-m-d')) {
-                $out['daily'] = self::daily();
-                Settings::set('last_daily', date('Y-m-d'));
-            }
+                // core 1.1: each organisation's own work, while time allows
+                foreach (self::tenants() as $tid) {
+                    if (microtime(true) - $start > self::BUDGET_SECONDS) {
+                        $out['deferred'] = true;
+                        break;
+                    }
+                    $r = Tenancy::run($tid, static fn () => self::forTenant());
+                    foreach ($r as $k => $v) {
+                        $out[$k] = ($out[$k] ?? 0) + $v;
+                    }
+                }
+                // the platform's check of every audit chain and the rules across organisations
+                $last = json_decode((string) Settings::get('last_integrity'), true);
+                if ((! $last || strtotime($last['at'] . ' UTC') < time() - 20 * 3600) && microtime(true) - $start < self::BUDGET_SECONDS) {
+                    $res      = Integrity::run();
+                    $problems = array_sum(array_map('count', $res));
+                    $out['integrity'] = $problems;
+                    if ($problems) {
+                        foreach (self::platformOwners() as $uid) {
+                            Notify::user($uid, 'integrity', 'The integrity check found ' . $problems . ' problem(s)', null, '/platform/integrity');
+                        }
+                    }
+                }
+            });
             Settings::set('last_cron_at', (string) time());
             Db::exec('UPDATE {jobs_log} SET finished_at = ?, outcome = ? WHERE id = ?', [Db::now(), mb_substr(json_encode($out), 0, 255), $logId]);
+            Db::exec('DELETE FROM {jobs_log} WHERE started_at < ?', [gmdate('Y-m-d H:i:s', time() - 14 * 86400)]);
         } catch (Throwable $e) {
             log_message('error', 'Scheduled job failed: ' . $e->getMessage());
             Db::exec('UPDATE {jobs_log} SET finished_at = ?, outcome = ? WHERE id = ?', [Db::now(), mb_substr('error: ' . $e->getMessage(), 0, 255), $logId]);
@@ -50,6 +73,44 @@ final class Jobs
             Db::value('SELECT RELEASE_LOCK(?)', [Db::t('cron')]);
         }
         return $out;
+    }
+
+    /** Work for one organisation (the organisation is set): its nightly stock check and its daily reminders. */
+    public static function forTenant(): array
+    {
+        $out  = [];
+        $last = json_decode((string) Settings::get('last_reconcile'), true);
+        if (! $last || strtotime($last['at'] . ' UTC') < time() - 20 * 3600) {
+            $res      = Reconcile::run();
+            $problems = array_sum(array_map('count', $res));
+            $out['reconcile'] = $problems;
+            if ($problems) {
+                Notify::holders('admin.settings', null, 'integrity', 'The integrity check found ' . $problems . ' problem(s)', null, '/admin/reconcile');
+            }
+        }
+        if (Settings::get('last_daily') !== date('Y-m-d')) {
+            $out['notified'] = self::daily()['notified'];
+            Settings::set('last_daily', date('Y-m-d'));
+        }
+        return $out;
+    }
+
+    /** Seconds since the last scheduled run finished, or null when it never ran. */
+    public static function heartbeatAge(): ?int
+    {
+        $t = (int) Settings::get('last_cron_at', '0');
+        return $t ? time() - $t : null;
+    }
+
+    private static function tenants(): array
+    {
+        return array_map('intval', array_column(Db::unscoped(static fn () => Db::rows("SELECT id FROM {tenants} WHERE status NOT IN ('cancelled','suspended') ORDER BY id")), 'id'));
+    }
+
+    private static function platformOwners(): array
+    {
+        return array_map('intval', array_column(Db::rows("SELECT DISTINCT ur.user_id FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id
+                                                           WHERE ur.tenant_id IS NULL AND ur.scope_type = 'platform' AND r.code = 'platform_owner'"), 'user_id'));
     }
 
     /** Once a day: expired and expiring batches per warehouse, fleet papers, overdue transfers. */

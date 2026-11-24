@@ -23,10 +23,10 @@ if ($me) {
             ['/shipments', 'Pick, pack, dispatch', can('dispatch.manage')],
             ['/waves', 'Wave picking', can('dispatch.manage')],
             ['/transfers', 'Transfers', can('transfer.manage') || can('transfer.receive')],
-            ['/fleet', 'Fleet and trips', can('fleet.manage') || can('dispatch.manage')],
+            ['/fleet', 'Fleet and trips', (can('fleet.manage') || can('dispatch.manage')) && \App\Libraries\Platform\Modules::on('fleet')],
         ],
         'Make' => [
-            ['/production', 'Production', can('production.manage')],
+            ['/production', 'Production', can('production.manage') && \App\Libraries\Platform\Modules::on('production')],
         ],
         'Know' => [
             ['/reports', 'Reports', can('report.view') || can('stock.view')],
@@ -38,10 +38,27 @@ if ($me) {
         ],
         'Set up' => [
             ['/warehouses', 'Warehouses and bins', can('warehouse.setup')],
-            ['/admin', 'Administration', can('admin.users') || can('admin.settings')],
+            ['/admin', 'Administration', can('user.view') || can('role.view') || can('admin.settings')],
+            ['/billing', 'Plan and billing', ! ($single ?? true) && (can('billing.manage') || can('admin.settings'))],
             ['/audit', 'Audit log', can('audit.view')],
         ],
     ];
+    if (! ($org ?? null)) {
+        $groups = ['' => [['/org', 'Choose an organisation', count($orgs ?? []) > 0]]];
+    }
+    // core 1.1: the platform owner's console (online service edition)
+    if (! ($single ?? true) && \App\Libraries\Core\Access::platform('platform.tenants')) {
+        $groups['Platform'] = [
+            ['/platform', 'Organisations', true],
+            ['/platform/plans', 'Plans', true],
+            ['/platform/invoices', 'Invoices', true],
+            ['/platform/payments', 'Online payments', true],
+            ['/platform/billing', 'Billing settings', \App\Libraries\Core\Access::platform('platform.settings')],
+            ['/platform/settings', 'Platform settings', \App\Libraries\Core\Access::platform('platform.settings')],
+            ['/platform/integrity', 'Integrity check', \App\Libraries\Core\Access::platform('platform.settings')],
+            ['/platform/audit', 'Platform audit log', \App\Libraries\Core\Access::platform('platform.audit')],
+        ];
+    }
 }
 $active = static function (string $href) use ($path): bool {
     return $href === '/' ? $path === '/' : ($path === $href || str_starts_with($path, $href . '/'));
@@ -59,12 +76,24 @@ $active = static function (string $href) use ($path): bool {
 <link rel="stylesheet" href="<?= base_url('static/app.css?v=' . \App\Libraries\Core\Audit::APP_VERSION) ?>">
 <script src="<?= base_url('static/app.js?v=' . \App\Libraries\Core\Audit::APP_VERSION) ?>" defer></script>
 </head>
-<body data-base="<?= esc(rtrim(base_url(), '/'), 'attr') ?>"<?= \App\Libraries\Core\Auth::id() ? ' data-uid="' . (int) \App\Libraries\Core\Auth::id() . '"' . (\App\Libraries\Core\Access::can('stock.view') ? ' data-snapshot="1"' : '') : '' ?>>
+<body<?= $me ? ' data-live="' . site_url('live') . '" data-live-user="' . (int) $me['id'] . '"' : '' ?> data-base="<?= esc(rtrim(base_url(), '/'), 'attr') ?>"<?= \App\Libraries\Core\Auth::id() ? ' data-uid="' . (int) \App\Libraries\Core\Auth::id() . '"' . (\App\Libraries\Core\Access::can('stock.view') ? ' data-snapshot="1"' : '') : '' ?>>
 <a class="skip" href="#main">Skip to content</a>
 <div id="net-banner" class="net-banner" role="status" hidden>You are offline. Nothing can be saved until you are back online.</div>
 <header class="topbar">
-  <a class="brand" href="<?= site_url('/') ?>"><img src="<?= base_url('static/brand/mark-96.png') ?>" alt="" width="40" height="30"><span><span class="name"><?= esc(\App\Libraries\Core\Settings::get('app_name')) ?></span><span class="by"><?= esc(\App\Libraries\Core\Settings::get('company_name') ?: 'by Chatu Innovations') ?></span></span></a>
+  <a class="brand" href="<?= site_url('/') ?>"><img src="<?= base_url('static/brand/mark-96.png') ?>" alt="" width="40" height="30"><span><span class="name"><?= esc(\App\Libraries\Core\Settings::get('app_name')) ?></span><span class="by"><?= esc(($org ?? null) ? (\App\Libraries\Core\Settings::get('company_name') ?: $org['name']) : 'by Chatu Innovations') ?></span></span></a>
   <?php if ($me): ?>
+    <?php if (count($orgs ?? []) > 1 && ! ($single ?? true)): ?>
+      <form method="post" action="<?= site_url('org') ?>" class="entity-switch org-switch">
+        <?= csrf_field() ?>
+        <label class="sr" for="org-select">Organisation</label>
+        <select id="org-select" name="tenant_id" data-autosubmit>
+          <?php if (! ($org ?? null)): ?><option value="">Choose an organisation</option><?php endif ?>
+          <?php foreach ($orgs as $o): ?>
+            <option value="<?= (int) $o['id'] ?>" <?= (int) ($org['id'] ?? 0) === (int) $o['id'] ? 'selected' : '' ?>><?= esc($o['name']) ?></option>
+          <?php endforeach ?>
+        </select>
+      </form>
+    <?php endif ?>
     <?php if (count($warehouses) > 1): ?>
       <form method="post" action="<?= site_url('warehouse/switch') ?>" class="entity-switch">
         <?= csrf_field() ?>
@@ -95,6 +124,11 @@ $active = static function (string $href) use ($path): bool {
   </nav>
   <?php endif ?>
   <main id="main" class="main">
+    <?php if (($org ?? null) && ! ($single ?? true)): $st = $org['status']; ?>
+      <?php if ($st === 'suspended'): ?><div class="org-banner bad" role="status"><b><?= esc($org['name']) ?> is suspended.</b> You can look things up, but nothing can be changed until the account is paid<?= can('admin.settings') ? ': <a href="' . site_url('billing') . '">Plan and billing</a>' : '' ?>.</div>
+      <?php elseif ($st === 'past_due'): ?><div class="org-banner" role="status"><b>Payment overdue.</b> <?= can('admin.settings') ? 'Pay the open invoice under <a href="' . site_url('billing') . '">Plan and billing</a> to avoid suspension.' : 'Ask your administrator to pay the open invoice.' ?></div>
+      <?php elseif ($st === 'trial' && $org['trial_ends_at']): $left = (int) ceil((strtotime($org['trial_ends_at'] . ' UTC') - time()) / 86400); ?><div class="org-banner" role="status">Trial: <?= max(0, $left) ?> day<?= $left === 1 ? '' : 's' ?> left.<?= can('admin.settings') ? ' <a href="' . site_url('billing') . '">Plan and billing</a>' : '' ?></div><?php endif ?>
+    <?php endif ?>
     <?php if ($msg = session()->getFlashdata('ok')): ?><div class="flash ok" role="status"><?= esc($msg) ?></div><?php endif ?>
     <?php if ($msg = session()->getFlashdata('error')): ?><div class="flash err" role="alert"><?= esc($msg) ?></div><?php endif ?>
     <?= view('partials/print_head', ['title' => $title]) ?>

@@ -47,6 +47,7 @@ final class Warehouses
             throw new BizException('Give the warehouse a name.');
         }
         return Db::atomic(static function () use ($d, $code, $name) {
+            \App\Libraries\Platform\Billing::checkLimit('locations');   // core 1.5: the plan's limit on warehouses
             if (Db::value('SELECT id FROM {warehouses} WHERE tenant_id = {tid} AND code = ?', [$code])) {
                 throw new BizException('Warehouse code ' . $code . ' is already used.');
             }
@@ -77,6 +78,9 @@ final class Warehouses
             'pick_policy' => ($d['pick_policy'] ?? $w['pick_policy']) === 'fifo' ? 'fifo' : 'fefo',
             'active' => isset($d['active']) ? (int) (bool) $d['active'] : (int) $w['active'],
         ];
+        if ($row['active'] && ! (int) $w['active']) {
+            \App\Libraries\Platform\Billing::checkLimit('locations');   // core 1.5: switching one back on counts too
+        }
         if (! $row['active'] && Db::value('SELECT 1 FROM {stock} WHERE tenant_id = {tid} AND warehouse_id = ? LIMIT 1', [$id])) {
             throw new BizException('The warehouse still holds stock. Move or transfer it first.');
         }

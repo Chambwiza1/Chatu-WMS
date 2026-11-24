@@ -22,7 +22,7 @@ class AuthFilter implements FilterInterface
         }
         if (! $user) {
             $path = '/' . ltrim($request->getUri()->getPath(), '/');
-            if (str_starts_with($path, '/api/')) {
+            if (str_starts_with($path, '/api/') || $path === '/live') {
                 return service('response')->setStatusCode(401)->setJSON(['error' => 'Please sign in.']);
             }
             if ($request->getMethod() === 'GET') {
@@ -30,7 +30,10 @@ class AuthFilter implements FilterInterface
             }
             return redirect()->to(site_url('login'));
         }
-        session()->set('last_seen', time());
+        if ('/' . ltrim($request->getUri()->getPath(), '/') !== '/live') {
+            session()->set('last_seen', time()); // core 1.1 (E2): the pop-up check every minute is not activity
+        }
+        \App\Filters\TenantFilter::resolve();
         \App\Libraries\Jobs::maybeRunOnVisit();
         return null;
     }

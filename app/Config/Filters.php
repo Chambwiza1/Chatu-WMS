@@ -28,6 +28,9 @@ class Filters extends BaseFilters
         'auth'      => \App\Filters\AuthFilter::class,
         'installed' => \App\Filters\InstalledFilter::class,
         'csp'       => \App\Filters\CspFilter::class,
+        'tenant'    => \App\Filters\TenantFilter::class,   // core 1.1: the organisation from the session, checked against the memberships
+        'platform'  => \App\Filters\PlatformFilter::class, // core 1.1: the platform owner's console
+        'update'    => \App\Filters\UpdateFilter::class,   // core 1.1 (A9): new files on an old database go to /update
         'csrf'          => \App\Filters\CsrfFilter::class, // core 1.1: a plain message for an expired page
         'toolbar'       => DebugToolbar::class,
         'honeypot'      => Honeypot::class,
@@ -75,9 +78,10 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
-            'csrf' => ['except' => ['cron/run']],
+            'csrf' => ['except' => ['cron/run', 'pay/lenco/*']],
             'invalidchars',
             'installed' => ['except' => ['install', 'install/*', 'sw.js', 'manifest.webmanifest', 'static/*']],
+            'update'    => ['except' => ['install', 'install/*', 'sw.js', 'manifest.webmanifest', 'static/*', 'update', 'login', 'logout', 'health']],
         ],
         'after' => [
             'secureheaders',

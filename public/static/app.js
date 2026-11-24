@@ -39,7 +39,7 @@
     const form = e.target;
     if ((form.method || '').toLowerCase() !== 'post') return;
     if (!online) { e.preventDefault(); alert('Not saved: you are offline. Try again when you are connected.'); return; }
-    const msg = e.submitter && e.submitter.dataset.confirm;
+    const msg = (e.submitter && e.submitter.dataset.confirm) || form.dataset.confirm;
     if (msg && !confirm(msg)) { e.preventDefault(); return; }
     if (form.dataset.submitted) { e.preventDefault(); return; }
     form.dataset.submitted = '1';
@@ -209,4 +209,209 @@
   if ('serviceWorker' in navigator && document.body.dataset.base && location.protocol !== 'file:') {
     navigator.serviceWorker.register((document.body.dataset.offlinePage !== undefined ? '' : base + '/') + 'sw.js').catch(() => {});
   }
+})();
+
+/* core 1.1: the permissions grid and the message pop-ups (from ChatuPOS 2.0) */
+(function () {
+  'use strict';
+  // permissions grid (core 1.1, as ChatuPOS beta12): "all" ticks a module's row; on a person's page, the boxes a ticked role gives are greyed
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tick-row]');
+    if (!b) return;
+    const boxes = [...b.closest('tr').querySelectorAll('input[type=checkbox]:not([disabled])')];
+    const on = boxes.some((x) => !x.checked);
+    boxes.forEach((x) => { x.checked = on; });
+  });
+  const af = document.querySelector('[data-access-form]');
+  if (af) {
+    const direct = new Set([...af.querySelectorAll('[data-rights] input[data-code]')].filter((x) => x.checked && !x.dataset.roleGiven).map((x) => x.dataset.code));
+    const sync = () => {
+      const given = {};
+      af.querySelectorAll('input[name="roles[]"]').forEach((r) => {
+        if (!r.checked) return;
+        (r.dataset.perms || '').split(',').filter(Boolean).forEach((c) => { (given[c] = given[c] || []).push(r.dataset.roleName); });
+      });
+      const locked = af.querySelector('input[name="roles[]"]') && af.querySelector('input[name="roles[]"]').disabled;
+      af.querySelectorAll('[data-rights] input[data-code]').forEach((x) => {
+        const g = given[x.dataset.code];
+        const label = x.closest('label');
+        if (g) {
+          if (!x.dataset.roleGiven && x.checked) direct.add(x.dataset.code);
+          x.dataset.roleGiven = '1'; x.checked = true; x.disabled = true; label.classList.add('from-role');
+          label.title = label.title.replace(/\. From the role .*$/, '') + '. From the role ' + g.join(', ');
+        } else if (x.dataset.roleGiven) {
+          delete x.dataset.roleGiven; x.disabled = !!locked; x.checked = direct.has(x.dataset.code); label.classList.remove('from-role');
+          label.title = label.title.replace(/\. From the role .*$/, '');
+        }
+      });
+    };
+    af.addEventListener('change', (e) => {
+      const x = e.target;
+      if (x.matches('[data-rights] input[data-code]')) { if (x.checked) direct.add(x.dataset.code); else direct.delete(x.dataset.code); }
+      if (x.matches('input[name="roles[]"]')) sync();
+      if (x.matches('input[name="warehouses[]"]') && x.checked) { const o = af.querySelector('input[name="all_warehouses"][value="0"]'); if (o) o.checked = true; }
+    });
+  }
+  // core 1.1 (E2, as ChatuPOS and Chatu Assets): new messages pop up on every screen with a short tone and stay until
+  // each is opened or closed with x (which reads it); Close all hides them until the next sign-in without reading them.
+  // Each device can mute the tone. The check every 45 s is not activity.
+  (function live() {
+    const body = document.body;
+    const url = body.dataset.live;
+    if (!url || document.querySelector('[data-no-live]')) return;
+    const uid = body.dataset.liveUser || '0';
+    const K_MSG = 'chatu.live.msg.' + uid;
+    const K_ALERT = 'chatu.live.alerts.' + uid;
+    const K_MUTE = 'chatu.live.mute';
+    const K_HID = 'chatu.live.hidden.' + uid;
+    const store = (st, k, v) => { try { if (v === undefined) return st.getItem(k); st.setItem(k, v); } catch (e) { /* private mode */ } return null; };
+    let ctx = null;
+    const unlock = () => { if (!ctx) { try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { ctx = null; } } };
+    document.addEventListener('pointerdown', unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    function chime(urgent) {
+      if (!ctx || store(localStorage, K_MUTE) === '1') return;
+      try {
+        if (ctx.state === 'suspended') ctx.resume();
+        const notes = urgent ? [880, 660, 880] : [660, 880];
+        notes.forEach((f, i) => {
+          const o = ctx.createOscillator(); const g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+          const t0 = ctx.currentTime + i * 0.18;
+          g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+          o.start(t0); o.stop(t0 + 0.17);
+        });
+      } catch (e) { /* no sound */ }
+    }
+    let stack = null;
+    function holder() {
+      if (stack && document.body.contains(stack)) return stack;
+      stack = document.createElement('section');
+      stack.className = 'live-stack'; stack.setAttribute('aria-label', 'Alerts and messages'); stack.setAttribute('aria-live', 'polite');
+      const bar = document.createElement('div'); bar.className = 'live-bar';
+      const mute = document.createElement('button'); mute.type = 'button'; mute.className = 'live-mute';
+      const label = () => { mute.textContent = store(localStorage, K_MUTE) === '1' ? 'Sound: off on this device' : 'Sound: on'; mute.setAttribute('aria-pressed', store(localStorage, K_MUTE) === '1' ? 'true' : 'false'); };
+      mute.addEventListener('click', () => { store(localStorage, K_MUTE, store(localStorage, K_MUTE) === '1' ? '0' : '1'); label(); });
+      label();
+      const all = document.createElement('button'); all.type = 'button'; all.className = 'live-close-all'; all.textContent = 'Close all';
+      all.addEventListener('click', () => {
+        // core 1.1: Close all hides; it does not read. The messages stay unread on Messages and in the count.
+        let hid = {};
+        try { hid = JSON.parse(store(localStorage, K_HID) || '{}'); } catch (e) { hid = {}; }
+        hid.ids = hid.ids || [];
+        stack.querySelectorAll('.live-n').forEach((n) => { if (n.dataset.id) hid.ids.push(Number(n.dataset.id)); n.remove(); });
+        store(localStorage, K_HID, JSON.stringify(hid));
+        const more = stack.querySelector('.live-more'); if (more) more.remove();
+        stack.hidden = true;
+      });
+      bar.append(mute, all);
+      stack.appendChild(bar);
+      document.body.appendChild(stack);
+      return stack;
+    }
+    function csrf() { const i = document.querySelector('input[name^="csrf"], input[name="' + (window.CSRF_NAME || 'csrf_test_name') + '"]'); return i ? [i.name, i.value] : null; }
+    function notice(n) {
+      const st = holder(); st.hidden = false;
+      if (st.querySelectorAll('.live-n').length >= 6) { const old = st.querySelector('.live-n:not([data-live-key^="msg-"])') || st.querySelector('.live-n'); old.remove(); }
+      const el = document.createElement('article');
+      el.className = 'live-n ' + (n.tone === 'bad' ? 'bad' : n.kind === 'msg' ? 'msg' : 'warn');
+      if (n.key) el.dataset.liveKey = n.key; // not data-key: that is the number pad's
+      if (n.id) el.dataset.id = String(n.id);
+      el.setAttribute('role', n.tone === 'bad' ? 'alert' : 'status');
+      const t = document.createElement('p'); t.className = 'live-t';
+      const tag = document.createElement('span'); tag.className = 'live-tag'; tag.textContent = n.kind === 'msg' ? 'Message' : 'Alert';
+      t.append(tag, document.createTextNode(' ' + n.title));
+      el.appendChild(t);
+      if (n.body) { const b = document.createElement('p'); b.className = 'live-b'; b.textContent = n.body.length > 160 ? n.body.slice(0, 157) + '…' : n.body; el.appendChild(b); }
+      const acts = document.createElement('div'); acts.className = 'live-acts';
+      const open = document.createElement('a'); open.href = n.url; open.className = 'btn small'; open.textContent = 'Open';
+      acts.appendChild(open);
+      if (n.kind === 'alert' && body.dataset.alertsDismiss) {
+        const aside = document.createElement('button'); aside.type = 'button'; aside.className = 'btn small secondary'; aside.textContent = 'Put aside';
+        aside.title = 'Hide until it changes';
+        aside.addEventListener('click', () => {
+          const fd = new FormData(); fd.append('key', n.key); const c = csrf(); if (c) fd.append(c[0], c[1]);
+          fetch(body.dataset.alertsDismiss, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Chatu-Popup': '1', Accept: 'application/json' } }).catch(() => {});
+          el.remove();
+        });
+        acts.appendChild(aside);
+      }
+      const x = document.createElement('button'); x.type = 'button'; x.className = 'live-x'; x.setAttribute('aria-label', 'Close'); x.textContent = '×';
+      x.addEventListener('click', () => {
+        if (n.kind === 'msg' && n.id && n.read) { // core 1.1: x means "read, put it away"
+          const fd = new FormData(); const c = csrf(); if (c) fd.append(c[0], c[1]);
+          fetch(n.read + '/' + n.id + '/read', { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest', Accept: 'application/json' } }).catch(() => {});
+        }
+        el.remove(); if (!stack.querySelector('.live-n')) stack.hidden = true;
+      });
+      acts.appendChild(x);
+      el.appendChild(acts);
+      st.appendChild(el);
+    }
+    function counts(d) {
+      const set = (sel, n, label) => {
+        const a = document.querySelector(sel); if (!a) return;
+        let c = a.querySelector('.count');
+        if (n > 0) { if (!c) { c = document.createElement('span'); c.className = 'count'; a.appendChild(document.createTextNode(' ')); a.appendChild(c); } c.textContent = n > 99 ? '99+' : String(n); }
+        else if (c) c.remove();
+        if (label) a.setAttribute('aria-label', label + (n ? ': ' + n : ''));
+      };
+      set('.bell', d.unread); set('.alerts-bell', d.alertCount, 'Alerts');
+    }
+    let busy = false;
+    function poll() {
+      if (busy) return; busy = true;
+      const seenMsg = Number(store(localStorage, K_MSG) || '-1');
+      fetch(url + '?after=' + Math.max(0, seenMsg), { credentials: 'same-origin', headers: { Accept: 'application/json' }, cache: 'no-store' })
+        .then((r) => { if (r.status === 401) { clearInterval(timer); return null; } return r.ok ? r.json() : null; })
+        .then((d) => {
+          busy = false;
+          if (!d || !d.ok) return;
+          counts(d);
+          let fresh = 0; let urgent = false;
+          if (d.popups) {
+            // core 1.1 (from Chatu Assets 2.2.2): the newest unread messages stay up on every page until each one is
+            // opened (reads that one) or closed with x (reads it, puts it away). Close all hides them until the next
+            // sign-in without reading them. A message read elsewhere leaves the screen at the next check.
+            let hid = {};
+            try { hid = JSON.parse(store(localStorage, K_HID) || '{}'); } catch (e) { hid = {}; }
+            if (hid.session !== d.session) { hid = { session: d.session, ids: [] }; store(localStorage, K_HID, JSON.stringify(hid)); }
+            const want = new Set();
+            d.messages.forEach((m) => {
+              if (hid.ids.indexOf(m.id) !== -1) return;
+              want.add('msg-' + m.id);
+              if (!document.querySelector('.live-n[data-live-key="msg-' + m.id + '"]')) {
+                notice({ kind: 'msg', key: 'msg-' + m.id, id: m.id, title: m.title, body: m.body, url: m.url, read: d.read });
+                if (m.new && seenMsg >= 0) fresh++;
+              }
+            });
+            document.querySelectorAll('.live-n[data-live-key^="msg-"]').forEach((x) => { if (!want.has(x.dataset.liveKey)) x.remove(); });
+            let more = stack ? stack.querySelector('.live-more') : null;
+            if (d.more > 0 && want.size) {
+              holder();
+              if (!more) { more = document.createElement('a'); more.className = 'live-more'; stack.appendChild(more); }
+              more.href = d.all; more.textContent = d.more + ' more unread on Messages';
+              stack.appendChild(more);
+            } else if (more) { more.remove(); }
+            if (stack && !stack.querySelector('.live-n')) stack.hidden = true;
+            let shown = {};
+            try { shown = JSON.parse(store(sessionStorage, K_ALERT) || '{}'); } catch (e) { shown = {}; }
+            const now = {};
+            d.alerts.forEach((a) => {
+              now[a.key] = 1;
+              if (!shown[a.key]) { notice({ kind: 'alert', key: a.key, title: a.title, tone: a.tone, url: a.url }); fresh++; if (a.tone === 'bad') urgent = true; }
+            });
+            store(sessionStorage, K_ALERT, JSON.stringify(now));
+          }
+          store(localStorage, K_MSG, String(d.maxId));
+          if (fresh && d.sound) chime(urgent);
+          if (d.every && d.every * 1000 !== every) { every = d.every * 1000; clearInterval(timer); timer = setInterval(tick, every); }
+        })
+        .catch(() => { busy = false; });
+    }
+    setTimeout(poll, 1200);
+    let every = 45000;
+    const tick = () => { if (!document.hidden || Math.random() < 0.5) poll(); };
+    let timer = setInterval(tick, every);
+  })();
 })();

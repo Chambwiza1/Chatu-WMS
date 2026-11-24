@@ -2,16 +2,17 @@
 
 namespace App\Controllers;
 
+use App\Libraries\Admin\Roles;
 use App\Libraries\Admin\Users;
 use App\Libraries\Core\Access;
 use App\Libraries\Core\Audit;
 use App\Libraries\Core\BizException;
 use App\Libraries\Core\Db;
 use App\Libraries\Core\Settings;
+use App\Libraries\Core\Tenancy;
 use App\Libraries\Reports\Reconcile;
-use App\Libraries\Setup\Seed;
 
-/** Users and roles, settings, reason codes, integrity check. */
+/** People and access, roles, settings, reason codes, integrity check. */
 class Admin extends BaseController
 {
     public const EDITABLE = [
@@ -38,113 +39,145 @@ class Admin extends BaseController
         'max_upload_mb'     => ['Largest upload (MB)', 'Proof-of-delivery photos and scans.'],
     ];
 
+    /** Settings an organisation keeps; the others belong to the installation (platform settings, or here in the single-company edition). */
+    public const PLATFORM_KEYS = ['session_idle_minutes', 'single_session', 'mail_from', 'mail_from_name', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'web_cron', 'max_upload_mb'];
+
+    /** The installation's settings, kept by the platform owner (or by the administrator in the single-company edition). */
+    public static function platformFields(): array
+    {
+        return array_intersect_key(self::EDITABLE, array_flip(self::PLATFORM_KEYS));
+    }
+
     public function index()
     {
-        if (! Access::can('admin.users') && ! Access::can('admin.settings')) {
-            return $this->need('admin.users');
+        if ($r = $this->needAny(['user.view', 'role.view', 'admin.settings'])) {
+            return $r;
         }
-        $last = json_decode((string) Settings::get('last_reconcile'), true);
-        $cron = (int) Settings::get('last_cron_at', '0');
-        return $this->render('admin/index', ['last' => $last, 'cron' => $cron, 'users' => (int) Db::value('SELECT COUNT(*) FROM {users} WHERE active = 1'),
-            'jobs' => Db::rows('SELECT * FROM {jobs_log} ORDER BY id DESC LIMIT 5'), 'cronKey' => Access::can('admin.settings') ? Settings::get('cron_key') : null,
+        $single = Tenancy::single();
+        $last   = json_decode((string) Settings::get('last_reconcile'), true);
+        $cron   = (int) Settings::get('last_cron_at', '0');
+        return $this->render('admin/index', ['last' => $last, 'cron' => $cron, 'single' => $single,
+            'users' => (int) Db::value("SELECT COUNT(*) FROM {tenant_users} WHERE tenant_id = {tid} AND status = 'active'"),
+            'jobs' => $single ? Db::rows('SELECT * FROM {jobs_log} ORDER BY id DESC LIMIT 5') : [], 'cronKey' => $single && Access::can('admin.settings') ? Settings::get('cron_key') : null,
             'pending' => Access::can('admin.settings') ? \App\Libraries\Setup\Upgrade::pending() : []], 'Administration');
     }
 
-    /** Bring the database up to this version after the files were copied over (for hosts without a terminal). */
+    /** Single-company edition: the administrator runs the database update (online service: the platform owner does, for every organisation at once). */
     public function upgrade()
     {
         return $this->act(function () {
+            if (! Tenancy::single()) {
+                throw new BizException('The platform owner updates the database for every organisation.');
+            }
             Access::require('admin.settings');
-            $todo = \App\Libraries\Setup\Upgrade::pending();
-            if (! $todo) {
-                return $this->ok('The database is already up to date.', 'admin');
-            }
-            $runner = service('migrations');
-            $runner->setNamespace(null);
-            if (! $runner->latest()) {
-                throw new \App\Libraries\Core\BizException('The database update did not finish. Check writable/logs, or run php spark migrate --all.');
-            }
-            \App\Libraries\Core\Audit::log('system.upgrade', 'settings', null, null, ['version' => \App\Libraries\Core\Audit::APP_VERSION, 'migrations' => $todo]);
-            return $this->ok('Database updated to version ' . \App\Libraries\Core\Audit::APP_VERSION . '.', 'admin');
+            return PlatformTools::upgrade($this, 'admin');
         }, site_url('admin'));
     }
 
     public function users()
     {
-        if ($r = $this->need('admin.users')) {
+        if ($r = $this->need('user.view')) {
             return $r;
         }
-        return $this->render('admin/users', ['rows' => Users::list()], 'Users and roles');
+        return $this->render('admin/users', ['rows' => Users::list()], 'People and access');
     }
 
     public function createUser()
     {
         return $this->act(function () {
             $id = Users::create((array) $this->request->getPost());
-            return $this->ok('User created. Give them their roles below.', 'admin/users/' . $id);
+            return $this->ok('Added. Now give them a role and their warehouses.', 'admin/users/' . $id);
+        }, site_url('admin/users'));
+    }
+
+    public function addExisting()
+    {
+        return $this->act(function () {
+            $id = Users::addExisting((string) $this->in('login', ''));
+            return $this->ok('Added. Now give them a role and their warehouses.', 'admin/users/' . $id);
         }, site_url('admin/users'));
     }
 
     public function user(int $id)
     {
-        if ($r = $this->need('admin.users')) {
-            return $r;
-        }
-        $u = Db::row('SELECT * FROM {users} WHERE id = ?', [$id]);
-        if (! $u) {
-            return $this->notFound('User');
-        }
-        return $this->render('admin/user', ['u' => $u, 'roles' => Access::roles($id), 'allRoles' => Db::rows('SELECT * FROM {roles} ORDER BY rank_level DESC, name'),
-            'warehouses' => Db::rows('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 ORDER BY code'), 'conflicts' => Access::sodConflicts($id)], $u['name']);
+        return $this->page(function () use ($id) {
+            Access::require('user.view');
+            $u = Users::get($id);
+            return $this->render('admin/user', ['u' => $u, 'shared' => Users::shared($id), 'access' => Users::access($id), 'allRoles' => Roles::list(),
+                'whs' => Db::rows('SELECT id, code, name, active FROM {warehouses} WHERE tenant_id = {tid} ORDER BY active DESC, code'), 'conflicts' => Access::sodConflicts($id)], $u['name']);
+        });
     }
 
     public function saveUser(int $id)
     {
         return $this->act(function () use ($id) {
-            $do = (string) $this->in('do', 'save');
-            if ($do === 'password') {
-                Users::setPassword($id, (string) $this->in('password'));
-                return $this->ok('Password set. Give it to the person privately; they can change it under their name.', 'admin/users/' . $id);
+            switch ((string) $this->in('do', 'save')) {
+                case 'password':
+                    Users::setPassword($id, (string) $this->in('password'));
+                    return $this->ok('Password set. Give it to the person privately; they can change it under their name.', 'admin/users/' . $id);
+                case 'deactivate':
+                    Users::setActive($id, false);
+                    return $this->ok('Switched off in this organisation; the person cannot work here.', 'admin/users/' . $id);
+                case 'activate':
+                    Users::setActive($id, true);
+                    return $this->ok('Switched on.', 'admin/users/' . $id);
+                default:
+                    Users::update($id, (array) $this->request->getPost());
+                    return $this->ok('Saved.', 'admin/users/' . $id);
             }
-            if ($do === 'deactivate' || $do === 'activate') {
-                Users::setActive($id, $do === 'activate');
-                return $this->ok($do === 'activate' ? 'Account switched on.' : 'Account switched off; the person cannot sign in.', 'admin/users/' . $id);
-            }
-            Users::update($id, (array) $this->request->getPost());
-            return $this->ok('Saved.', 'admin/users/' . $id);
         }, site_url('admin/users/' . $id));
     }
 
-    public function grant(int $id)
+    /** Roles, warehouses and direct permissions of a person, in one save. */
+    public function saveAccess(int $id)
     {
         return $this->act(function () use ($id) {
-            $scope = (string) $this->in('scope', 'system');
-            Users::grant($id, (string) $this->in('role'), $scope === 'system' ? 'system' : 'warehouse', $scope === 'system' ? null : (int) $scope);
-            return $this->ok('Role given.', 'admin/users/' . $id);
+            Users::setAccess($id, (array) ($this->request->getPost('roles') ?? []), (string) $this->in('all_warehouses') === '1',
+                (array) ($this->request->getPost('warehouses') ?? []), (array) ($this->request->getPost('perms') ?? []));
+            return $this->ok('Access saved.', 'admin/users/' . $id);
         }, site_url('admin/users/' . $id));
     }
 
-    public function revoke(int $userRoleId)
-    {
-        $uid = (int) Db::value('SELECT user_id FROM {user_roles} WHERE tenant_id = {tid} AND id = ?', [$userRoleId]);
-        return $this->act(function () use ($userRoleId, $uid) {
-            Users::revoke($userRoleId);
-            return $this->ok('Role removed.', 'admin/users/' . $uid);
-        }, site_url('admin/users/' . $uid));
-    }
-
-    /** What each role may do: one row per permission, one column per role. */
     public function roles()
     {
-        if (! Access::can('admin.users') && ! Access::can('audit.view')) {
-            return $this->need('admin.users');
+        if ($r = $this->need('role.view')) {
+            return $r;
         }
-        $grid = [];
-        foreach (Db::rows('SELECT r.code, rp.permission_code FROM {role_permissions} rp JOIN {roles} r ON r.id = rp.role_id') as $g) {
-            $grid[$g['permission_code']][$g['code']] = true;
-        }
-        return $this->render('admin/roles', ['roles' => Db::rows('SELECT * FROM {roles} ORDER BY rank_level DESC, name'), 'perms' => Seed::PERMISSIONS, 'grid' => $grid,
-            'sod' => Db::rows('SELECT s.description, ra.name a, rb.name b FROM {sod_rules} s JOIN {roles} ra ON ra.id = s.role_a_id JOIN {roles} rb ON rb.id = s.role_b_id')], 'Roles');
+        $sod = Db::rows('SELECT ra.name a, rb.name b, s.description FROM {sod_rules} s JOIN {roles} ra ON ra.id = s.role_a_id JOIN {roles} rb ON rb.id = s.role_b_id');
+        return $this->render('admin/roles', ['roles' => Roles::list(), 'sod' => $sod], 'Roles');
+    }
+
+    public function role(?int $id = null)
+    {
+        return $this->page(function () use ($id) {
+            Access::require($id ? 'role.view' : 'role.create');
+            $r = $id ? Roles::get($id) : null;
+            return $this->render('admin/role', ['r' => $r], $r ? $r['name'] : 'New role');
+        });
+    }
+
+    public function saveRole(?int $id = null)
+    {
+        return $this->act(function () use ($id) {
+            $rid = Roles::save(['name' => $this->in('name'), 'description' => $this->in('description'), 'perms' => (array) ($this->request->getPost('perms') ?? [])], $id);
+            return $this->ok($id ? 'Role saved.' : 'Role added. Give it to people under People.', 'admin/roles/' . $rid);
+        }, site_url($id ? 'admin/roles/' . $id : 'admin/roles/new'));
+    }
+
+    public function copyRole(int $id)
+    {
+        return $this->act(function () use ($id) {
+            $rid = Roles::copy($id);
+            return $this->ok('Copied. Rename it and change what it may do.', 'admin/roles/' . $rid);
+        }, site_url('admin/roles'));
+    }
+
+    public function deleteRole(int $id)
+    {
+        return $this->act(function () use ($id) {
+            Roles::delete($id);
+            return $this->ok('Role deleted.', 'admin/roles');
+        }, site_url('admin/roles/' . $id));
     }
 
     public function settings()
@@ -152,7 +185,8 @@ class Admin extends BaseController
         if ($r = $this->need('admin.settings')) {
             return $r;
         }
-        return $this->render('admin/settings', ['fields' => self::EDITABLE, 'reasons' => Db::rows('SELECT * FROM {reasons} WHERE tenant_id = {tid} ORDER BY use_for, label')], 'Settings');
+        $fields = Tenancy::single() ? self::EDITABLE : array_diff_key(self::EDITABLE, array_flip(self::PLATFORM_KEYS));
+        return $this->render('admin/settings', ['fields' => $fields, 'reasons' => Db::rows('SELECT * FROM {reasons} WHERE tenant_id = {tid} ORDER BY use_for, label')], 'Settings');
     }
 
     public function saveSettings()
@@ -162,6 +196,9 @@ class Admin extends BaseController
             $before = $after = [];
             Db::atomic(function () use (&$before, &$after) {
                 foreach (self::EDITABLE as $k => $_) {
+                    if (! Tenancy::single() && in_array($k, self::PLATFORM_KEYS, true)) {
+                        continue; // the platform owner keeps these for every organisation
+                    }
                     $v = $this->in($k);
                     if ($v === null) {
                         continue;

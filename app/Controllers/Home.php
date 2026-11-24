@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Libraries\Core\Access;
 use App\Libraries\Core\Auth;
 use App\Libraries\Core\Db;
+use App\Libraries\Core\Tenancy;
+use App\Libraries\Workflow\Notify;
 use App\Libraries\Reports\Dashboard;
 
 class Home extends BaseController
@@ -69,13 +71,61 @@ class Home extends BaseController
 
     public function notifications()
     {
-        $rows = Db::rows('SELECT * FROM {notifications} WHERE tenant_id = {tid} AND user_id = ? ORDER BY id DESC LIMIT 100', [Auth::id()]);
-        return $this->render('home/notifications', ['rows' => $rows], 'Messages');
+        return $this->render('home/notifications', ['rows' => Notify::list((int) Auth::id())], 'Messages');
+    }
+
+    /** core 1.1 (E2): the newest unread messages for the pop-ups; they stay until each is dealt with (Notify::popups). */
+    public function live()
+    {
+        $uid = Auth::id();
+        if (! $uid) {
+            return $this->response->setStatusCode(401)->setJSON(['ok' => false]);
+        }
+        $tid   = Tenancy::id();
+        $after = max(0, (int) $this->request->getGet('after'));
+        $pop   = Notify::popups((int) $uid, $after);
+        $max   = (int) Db::value('SELECT COALESCE(MAX(id), 0) FROM {notifications} WHERE tenant_id <=> ? AND user_id = ?', [$tid, $uid]);
+        $on    = static fn (string $k): bool => ! $tid || \App\Libraries\Core\Settings::tenant($k, '1') !== '0';
+        return $this->response->setHeader('Cache-Control', 'no-store')->setJSON([
+            'ok'       => true,
+            'popups'   => $on('live_popups'),
+            'sound'    => $on('live_sound'),
+            'unread'   => Notify::unreadCount((int) $uid),
+            'maxId'    => $max,
+            'messages' => array_map(static fn ($m) => ['id' => $m['id'], 'title' => $m['title'], 'body' => $m['body'], 'url' => site_url('notifications/' . $m['id']), 'new' => $m['new']], $pop['messages']),
+            'more'     => $pop['more'],
+            'all'      => site_url('notifications'),
+            'read'     => site_url('notifications'),
+            'session'  => substr(hash('sha256', $uid . ':' . (string) session('skey') . ':' . (int) $tid), 0, 16),
+            'alerts'   => [],
+            'alertCount' => 0,
+            'every'    => 45,
+        ]);
+    }
+
+    /** Open one message: it is read, and its page opens. */
+    public function openMessage(int $id)
+    {
+        $n = Notify::get((int) Auth::id(), $id);
+        if (! $n) {
+            return $this->notFound('Message');
+        }
+        Notify::readOne((int) Auth::id(), $id);
+        return redirect()->to(site_url(ltrim((string) ($n['link'] ?: 'notifications'), '/')));
+    }
+
+    public function readOne(int $id)
+    {
+        Notify::readOne((int) Auth::id(), $id);
+        if ($this->request->isAJAX() || str_contains((string) $this->request->getHeaderLine('Accept'), 'json')) {
+            return $this->response->setJSON(['ok' => true]);
+        }
+        return redirect()->to(site_url('notifications'));
     }
 
     public function readAll()
     {
-        Db::exec('UPDATE {notifications} SET read_at = ? WHERE tenant_id = {tid} AND user_id = ? AND read_at IS NULL', [Db::now(), Auth::id()]);
-        return redirect()->to(site_url('notifications'));
+        Notify::readAll((int) Auth::id());
+        return $this->ok('All messages marked as read.', 'notifications');
     }
 }

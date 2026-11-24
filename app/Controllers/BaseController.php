@@ -8,6 +8,9 @@ use App\Libraries\Core\Auth;
 use App\Libraries\Core\BizException;
 use App\Libraries\Core\Db;
 use App\Libraries\Core\DeniedException;
+use App\Libraries\Core\NotFoundException;
+use App\Libraries\Core\Rights;
+use App\Libraries\Core\Tenancy;
 use App\Libraries\Master\Items;
 use App\Libraries\Workflow\Notify;
 use CodeIgniter\Controller;
@@ -52,13 +55,17 @@ abstract class BaseController extends Controller
     {
         $uid  = Auth::id();
         $mine = [];
-        if ($uid) {
+        if ($uid && Tenancy::id() !== null) {
             $ids  = array_values(array_unique(array_merge(...array_map(static fn ($p) => Access::warehouses($p), ['stock.view', 'receive.post', 'dispatch.manage', 'warehouse.setup']))));
             $mine = $ids ? Db::rows('SELECT id, code, name FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code') : [];
         }
+        $me    = Auth::user();
         $data += [
             'title'      => $title,
-            'me'         => Auth::user(),
+            'me'         => $me,
+            'org'        => Tenancy::current(),
+            'orgs'       => $me ? Tenancy::memberships((int) $me['id']) : [],
+            'single'     => Tenancy::single(),
             'unread'     => $uid ? Notify::unreadCount($uid) : 0,
             'warehouses' => $mine,
             'whId'       => $uid ? ((int) session('wh') ?: (int) ($mine[0]['id'] ?? 0)) : 0,
@@ -75,6 +82,8 @@ abstract class BaseController extends Controller
     {
         try {
             return $fn();
+        } catch (NotFoundException $e) {
+            return $this->notFound(rtrim(str_replace(' not found.', '', $e->getMessage()), '.'));
         } catch (DeniedException $e) {
             Audit::denied('http.' . strtolower($this->request->getMethod()) . ' ' . $this->request->getUri()->getPath(), $e->getMessage());
             return $this->forbidden($e->getMessage());
@@ -85,6 +94,23 @@ abstract class BaseController extends Controller
             log_message('error', $e->getMessage() . "\n" . $e->getTraceAsString());
             session()->setFlashdata('error', 'Something went wrong and nothing was saved. The error has been logged.' . (ENVIRONMENT !== 'production' ? ' (' . $e->getMessage() . ')' : ''));
             return redirect()->to($back ?? previous_url())->withInput();
+        }
+    }
+
+    /** A page (GET) built by $fn: "not found" for another organisation's record, 403 with the reason for a refusal. */
+    protected function page(callable $fn)
+    {
+        try {
+            return $fn();
+        } catch (NotFoundException $e) {
+            return $this->notFound(rtrim(str_replace(' not found.', '', $e->getMessage()), '.'));
+        } catch (DeniedException $e) {
+            Audit::denied('http.get ' . $this->request->getUri()->getPath(), $e->getMessage());
+            return $this->forbidden($e->getMessage());
+        } catch (BizException $e) {
+            session()->setFlashdata('error', $e->getMessage());
+            $prev = previous_url();
+            return redirect()->to($prev && rtrim($prev, '/') !== rtrim(current_url(), '/') ? $prev : site_url('/'));
         }
     }
 
@@ -104,7 +130,11 @@ abstract class BaseController extends Controller
         $ok = $warehouseId ? Access::canAt($warehouseId, $perm) : Access::can($perm);
         if (! $ok) {
             Audit::denied('http.get ' . $this->request->getUri()->getPath(), 'Missing permission ' . $perm);
-            return $this->forbidden('You do not have permission to open this page.');
+            $l = Rights::label($perm);
+            if ($ok === false && $warehouseId && Access::can($perm)) {
+                return $this->forbidden('This warehouse is not one of yours. Ask your administrator to give it to you (' . $perm . ').');
+            }
+            return $this->forbidden('You do not have permission to open this page' . ($l ? ': ' . $l : '') . ' (' . $perm . ').');
         }
         return null;
     }

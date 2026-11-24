@@ -15,7 +15,7 @@ final class Settings
 
     public const DEFAULTS = [
         'app_name'             => 'Chatu Warehouse',
-        'edition'              => 'saas',  // saas: many organisations | single: one organisation on its own server
+        'edition'              => 'single', // single: one organisation on its own server (and every 0.2 installation) | saas: many organisations
         'session_idle_minutes' => '30',
         'mail_from'            => '',
         'mail_from_name'       => 'Chatu Warehouse',
@@ -44,6 +44,7 @@ final class Settings
         'live_sound'           => '1',
         'company_logo'         => '',
         'last_reconcile'       => '',      // the organisation's last integrity check (JSON)
+        'last_daily'           => '',      // the day its daily reminders went out
     ];
 
     public static function isTenantKey(string $name): bool

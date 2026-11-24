@@ -39,6 +39,7 @@ final class Production
     /** $d: code, name, output_item_id, output_qty, other_cost, notes, active, lines [{item_id, qty}]. */
     public static function saveRecipe(array $d, ?int $id = null): int
     {
+        \App\Libraries\Platform\Modules::require('production'); // core 1.5: nothing new while the module is off
         Access::require('production.manage');
         $code = strtoupper(trim((string) ($d['code'] ?? '')));
         if (! preg_match('/^[A-Z0-9._-]{1,30}$/', $code)) {
@@ -105,6 +106,7 @@ final class Production
      */
     public static function post(array $d, ?string $token = null): int
     {
+        \App\Libraries\Platform\Modules::require('production'); // core 1.5: nothing new while the module is off
         $wh = (int) ($d['warehouse_id'] ?? 0);
         Access::requireAt($wh, 'production.manage');
         return (int) Db::atomic(static function () use ($d, $wh, $token) {

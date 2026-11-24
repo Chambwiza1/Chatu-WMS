@@ -8,6 +8,8 @@ use CodeIgniter\Router\RouteCollection;
 $routes->setAutoRoute(false);
 
 // public
+$routes->get('update', 'Update::index');     // core 1.1 (A9): the in-app database update; every page comes here while steps wait
+$routes->post('update', 'Update::run');
 $routes->get('login', 'AuthController::login');
 $routes->post('login', 'AuthController::doLogin');
 $routes->get('install', 'Install::index');
@@ -16,15 +18,29 @@ $routes->get('cron/run', 'Cron::run');
 $routes->get('health', 'Cron::health'); // core 1.1
 $routes->get('api/ping', 'Home::ping');
 
+// core 1.5b: payment gateways call these with no sign-in (signature checked, or DPO asked)
+$routes->post('pay/lenco/(:segment)', 'PayPublic::lenco/$1');
+$routes->get('pay/return', 'PayPublic::back');
+
+// signed in, any organisation or none
 $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('logout', 'AuthController::logout');
     $routes->get('account', 'AuthController::account');
     $routes->post('account/password', 'AuthController::password');
+    $routes->get('org', 'AuthController::org');
+    $routes->post('org', 'AuthController::switchOrg');
+    $routes->get('notifications', 'Home::notifications');
+    $routes->get('live', 'Home::live');                                 // core 1.1 (E2): new messages for the pop-ups
+    $routes->post('notifications/read', 'Home::readAll');
+    $routes->get('notifications/(:num)', 'Home::openMessage/$1');
+    $routes->post('notifications/(:num)/read', 'Home::readOne/$1');
+});
+
+// inside an organisation
+$routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('warehouse/switch', 'Home::switchWarehouse');
 
     $routes->get('/', 'Home::index');
-    $routes->get('notifications', 'Home::notifications');
-    $routes->post('notifications/read', 'Home::readAll');
     $routes->get('find', 'Home::find');
     $routes->get('offline/snapshot', 'Offline::snapshot');
 
@@ -160,11 +176,17 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('admin/upgrade', 'Admin::upgrade');
     $routes->get('admin/users', 'Admin::users');
     $routes->post('admin/users', 'Admin::createUser');
+    $routes->post('admin/users/existing', 'Admin::addExisting');
     $routes->get('admin/users/(:num)', 'Admin::user/$1');
     $routes->post('admin/users/(:num)', 'Admin::saveUser/$1');
-    $routes->post('admin/users/(:num)/grant', 'Admin::grant/$1');
-    $routes->post('admin/roles/(:num)/revoke', 'Admin::revoke/$1');
+    $routes->post('admin/users/(:num)/access', 'Admin::saveAccess/$1');
     $routes->get('admin/roles', 'Admin::roles');
+    $routes->get('admin/roles/new', 'Admin::role');
+    $routes->post('admin/roles', 'Admin::saveRole');
+    $routes->get('admin/roles/(:num)', 'Admin::role/$1');
+    $routes->post('admin/roles/(:num)', 'Admin::saveRole/$1');
+    $routes->post('admin/roles/(:num)/copy', 'Admin::copyRole/$1');
+    $routes->post('admin/roles/(:num)/delete', 'Admin::deleteRole/$1');
     $routes->get('admin/settings', 'Admin::settings');
     $routes->post('admin/settings', 'Admin::saveSettings');
     $routes->post('admin/reasons', 'Admin::saveReason');
@@ -173,4 +195,42 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->get('admin/reconcile', 'Admin::reconcile');
     $routes->post('admin/reconcile', 'Admin::runReconcile');
     $routes->get('audit', 'AuditLog::index');
+
+    // core 1.5: the organisation's plan and invoices, and the modules it may switch
+    $routes->get('billing', 'Billing::index');
+    $routes->get('billing/invoices/(:num)', 'Billing::invoice/$1');
+    $routes->post('billing/invoices/(:num)/pay', 'Billing::pay/$1');
+    $routes->post('billing/payments/(:num)/check', 'Billing::check/$1');
+    $routes->get('admin/modules', 'Billing::modules');
+    $routes->post('admin/modules', 'Billing::saveModule');
+});
+
+// the platform owner (online service edition only)
+$routes->group('platform', ['filter' => ['auth', 'platform']], static function ($routes) {
+    $routes->get('/', 'Platform::index');
+    $routes->get('tenants/new', 'Platform::newTenant');
+    $routes->post('tenants', 'Platform::createTenant');
+    $routes->get('tenants/(:num)', 'Platform::tenant/$1');
+    $routes->post('tenants/(:num)/status', 'Platform::status/$1');
+    $routes->get('settings', 'Platform::settings');
+    $routes->post('settings', 'Platform::saveSettings');
+    $routes->get('integrity', 'Platform::integrity');
+    $routes->post('integrity', 'Platform::runIntegrity');
+    $routes->post('upgrade', 'Platform::upgrade');
+    $routes->get('audit', 'AuditLog::platform');
+    // core 1.5: plans, invoices, online payments
+    $routes->get('plans', 'PlatformBilling::plans');
+    $routes->post('plans', 'PlatformBilling::savePlan');
+    $routes->get('invoices', 'PlatformBilling::invoices');
+    $routes->get('invoices/(:num)', 'PlatformBilling::invoice/$1');
+    $routes->post('invoices/(:num)/pay', 'PlatformBilling::pay/$1');
+    $routes->post('invoices/(:num)/void', 'PlatformBilling::void/$1');
+    $routes->get('payments', 'PlatformBilling::payments');
+    $routes->post('payments/(:num)/check', 'PlatformBilling::checkPayment/$1');
+    $routes->get('billing', 'PlatformBilling::settings');
+    $routes->post('billing', 'PlatformBilling::saveSettings');
+    $routes->post('tenants/(:num)/plan', 'PlatformBilling::setPlan/$1');
+    $routes->post('tenants/(:num)/invoice', 'PlatformBilling::issue/$1');
+    $routes->post('tenants/(:num)/trial', 'PlatformBilling::extendTrial/$1');
+    $routes->post('tenants/(:num)/modules', 'PlatformBilling::modules/$1');
 });

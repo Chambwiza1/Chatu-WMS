@@ -20,7 +20,8 @@ final class Tenants
     public const STATUSES = ['trial' => 'Trial', 'active' => 'Active', 'past_due' => 'Payment overdue', 'suspended' => 'Suspended (read-only)', 'cancelled' => 'Cancelled'];
 
     /**
-     * New organisation with its first location and its account owner (an Administrator).
+     * New organisation with its first warehouse and its account owner (a System administrator who, as owner, may do
+     * everything everywhere).
      * $d: name, slug?, country?, timezone?, status?, location_code, location_name, location_town?,
      *     owner: either ['user_id' => existing login] or ['username', 'name', 'email', 'password']
      * $system: called by the installer (no signed-in platform owner).
@@ -88,12 +89,14 @@ final class Tenants
             }
             $platformLog = ['slug' => $slug, 'name' => $name, 'status' => $status];
             $result = Tenancy::run($tid, static function () use ($tid, $uid, $d, $name) {
-                $loc = Db::insert('locations', [
-                    'tenant_id' => $tid, 'code' => strtoupper(trim((string) ($d['location_code'] ?? 'HQ'))) ?: 'HQ', 'name' => trim((string) ($d['location_name'] ?? '')) ?: 'Head office',
-                    'town' => trim((string) ($d['location_town'] ?? '')) ?: null, 'timezone' => (string) ($d['timezone'] ?? 'Africa/Lusaka'), 'active' => 1, 'created_at' => Db::now(),
-                ]);
-                \App\Libraries\Dining\Setup::starter($tid, $loc); // VAT classes, Kitchen and Bar stations, a first floor
-                Seed::member($tid, $uid, [['tenant_admin', null]], true);
+                Seed::tenantStart($tid); // its own copies of the roles, and the reason codes
+                Seed::member($tid, $uid, [['system_admin', null]], true);
+                \App\Libraries\Core\Settings::set('company_name', mb_substr($name, 0, 150));
+                $before = Auth::id();
+                Auth::actAs($uid);
+                $loc = \App\Libraries\Master\Warehouses::create(['code' => strtoupper(trim((string) ($d['location_code'] ?? 'MAIN'))) ?: 'MAIN',
+                    'name' => trim((string) ($d['location_name'] ?? '')) ?: 'Main warehouse', 'town' => trim((string) ($d['location_town'] ?? ''))]);
+                Auth::actAs($before);
                 Audit::log('tenant.create', 'tenant', $tid, null, ['name' => $name, 'owner' => $uid, 'location' => $loc]);
                 return ['tenant' => $tid, 'owner' => $uid, 'location' => $loc];
             });
@@ -108,8 +111,7 @@ final class Tenants
         Access::requirePlatform('platform.tenants');
         return Db::unscoped(static fn () => Db::rows(
             "SELECT t.*, (SELECT COUNT(*) FROM {tenant_users} tu WHERE tu.tenant_id = t.id AND tu.status = 'active') users,
-                    (SELECT COUNT(*) FROM {locations} l WHERE l.tenant_id = t.id AND l.active = 1) locations,
-                    (SELECT COUNT(*) FROM {devices} d WHERE d.tenant_id = t.id AND d.revoked_at IS NULL AND d.paired_at IS NOT NULL) devices,
+                    (SELECT COUNT(*) FROM {warehouses} w WHERE w.tenant_id = t.id AND w.active = 1) locations,
                     (SELECT u.name FROM {tenant_users} tu JOIN {users} u ON u.id = tu.user_id WHERE tu.tenant_id = t.id AND tu.is_account_owner = 1 LIMIT 1) owner_name
                FROM {tenants} t ORDER BY t.status = 'cancelled', t.name"
         ));

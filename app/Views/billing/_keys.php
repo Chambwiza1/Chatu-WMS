@@ -1,0 +1,10 @@
+<section class="panel"><h2>Lenco: mobile money</h2>
+<p class="small">The customer types their Airtel, MTN or Zamtel number and approves the payment on the phone. <?= isset($available['lenco']) ? '<strong>Set up.</strong>' : 'Not set up.' ?> In Lenco, set the webhook address to <code><?= esc($webhook) ?></code>.</p>
+<div class="grid2"><div class="field"><label for="pay_lenco_token_enc">API token</label><input id="pay_lenco_token_enc" name="pay_lenco_token_enc" type="password" autocomplete="off" placeholder="<?= isset($available['lenco']) ? '(kept)' : '' ?>"></div>
+<div class="field"><label for="pay_lenco_base">API address</label><input id="pay_lenco_base" name="pay_lenco_base" value="<?= esc($keys['pay_lenco_base']) ?>"><span class="hint">Live: https://api.lenco.co/access/v2. Use the sandbox address while testing.</span></div></div></section>
+<section class="panel"><h2>DPO: card and mobile money</h2>
+<p class="small">The customer pays on DPO's own page and comes back here. <?= isset($available['dpo']) ? '<strong>Set up.</strong>' : 'Not set up.' ?></p>
+<div class="grid2"><div class="field"><label for="pay_dpo_token_enc">Company token</label><input id="pay_dpo_token_enc" name="pay_dpo_token_enc" type="password" autocomplete="off" placeholder="<?= $keys['pay_dpo_token_enc'] !== '' ? '(kept)' : '' ?>"></div>
+<div class="field"><label for="pay_dpo_service">Service type</label><input id="pay_dpo_service" name="pay_dpo_service" value="<?= esc($keys['pay_dpo_service']) ?>"><span class="hint">The number DPO gave <?= esc($who) ?> for this service.</span></div>
+<div class="field"><label for="pay_dpo_base">API address</label><input id="pay_dpo_base" name="pay_dpo_base" value="<?= esc($keys['pay_dpo_base']) ?>"></div>
+<div class="field"><label for="pay_dpo_page">Payment page</label><input id="pay_dpo_page" name="pay_dpo_page" value="<?= esc($keys['pay_dpo_page']) ?>"><span class="hint">Sandbox: https://secure1.sandbox.directpay.online/API/v6/ and its payv2.php?ID= page.</span></div></div></section>

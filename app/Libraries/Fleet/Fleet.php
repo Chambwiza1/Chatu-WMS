@@ -26,6 +26,7 @@ final class Fleet
 
     public static function saveVehicle(array $d, ?int $id = null): int
     {
+        \App\Libraries\Platform\Modules::require('fleet'); // core 1.5: nothing new while the module is off
         Access::require('fleet.manage');
         $reg = strtoupper(preg_replace('/\s+/', ' ', trim((string) ($d['reg_no'] ?? ''))));
         if ($reg === '' || mb_strlen($reg) > 20) {
@@ -81,6 +82,7 @@ final class Fleet
 
     public static function saveDriver(array $d, ?int $id = null): int
     {
+        \App\Libraries\Platform\Modules::require('fleet'); // core 1.5: nothing new while the module is off
         Access::require('fleet.manage');
         $name = trim((string) ($d['name'] ?? ''));
         if ($name === '') {
@@ -168,6 +170,7 @@ final class Fleet
     /** $d: warehouse_id, vehicle_id, driver_id, planned_date, route_note, shipments [ids], transfers [ids]. */
     public static function planTrip(array $d): int
     {
+        \App\Libraries\Platform\Modules::require('fleet'); // core 1.5: nothing new while the module is off
         Access::require('fleet.manage');
         $wh   = (int) ($d['warehouse_id'] ?? 0);
         $date = Lots::date($d['planned_date'] ?? '') ?? date('Y-m-d');
@@ -197,6 +200,7 @@ final class Fleet
 
     public static function addStop(int $tripId, string $kind, int $docId, ?int $seq = null): void
     {
+        \App\Libraries\Platform\Modules::require('fleet'); // core 1.5: nothing new while the module is off
         Access::require('fleet.manage');
         $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
         if (! $trip || $trip['status'] !== 'planned') {
