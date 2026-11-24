@@ -29,7 +29,7 @@ final class Counts
     {
         $c = Db::row('SELECT * FROM {counts} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $c) {
-            throw new BizException('Unknown count.');
+            throw new \App\Libraries\Core\NotFoundException('Count not found.');
         }
         return $c;
     }

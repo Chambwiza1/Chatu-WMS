@@ -103,7 +103,7 @@ final class Lots
         Db::atomic(static function () use ($lotId, $status, $reason) {
             $lot = Db::row('SELECT * FROM {lots} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$lotId]);
             if (! $lot) {
-                throw new BizException('Unknown batch.');
+                throw new \App\Libraries\Core\NotFoundException('Batch not found.');
             }
             Db::exec('UPDATE {lots} SET status = ?, hold_reason = ? WHERE tenant_id = {tid} AND id = ?', [$status, $status === 'active' ? null : mb_substr($reason, 0, 255), $lotId]);
             Audit::log('lot.' . $status, 'lot', $lotId, ['status' => $lot['status']], ['status' => $status, 'reason' => $reason]);

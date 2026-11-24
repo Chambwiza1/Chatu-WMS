@@ -27,7 +27,7 @@ final class Warehouses
     {
         $w = Db::row('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [$id]);
         if (! $w) {
-            throw new BizException('Unknown warehouse.');
+            throw new \App\Libraries\Core\NotFoundException('Warehouse not found.');
         }
         return $w;
     }
@@ -176,7 +176,7 @@ final class Warehouses
     {
         $bin = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$binId]);
         if (! $bin) {
-            throw new BizException('Unknown bin.');
+            throw new \App\Libraries\Core\NotFoundException('Bin not found.');
         }
         Access::requireAt((int) $bin['warehouse_id'], 'warehouse.setup');
         if (! in_array($status, ['active', 'blocked', 'inactive'], true)) {

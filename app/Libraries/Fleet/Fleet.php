@@ -62,7 +62,7 @@ final class Fleet
             if ($id) {
                 $old = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
                 if (! $old) {
-                    throw new BizException('Unknown vehicle.');
+                    throw new \App\Libraries\Core\NotFoundException('Vehicle not found.');
                 }
                 $status = in_array($d['status'] ?? '', ['available', 'in_service', 'retired'], true) ? $d['status'] : $old['status'];
                 if ($old['status'] === 'on_trip') {
@@ -115,7 +115,7 @@ final class Fleet
         return Db::atomic(static function () use ($vehicleId, $d, $kind) {
             $v = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$vehicleId]);
             if (! $v) {
-                throw new BizException('Unknown vehicle.');
+                throw new \App\Libraries\Core\NotFoundException('Vehicle not found.');
             }
             $odo = ($d['odometer_km'] ?? '') !== '' ? (int) $d['odometer_km'] : null;
             if ($odo !== null && $odo < (int) $v['odometer_km']) {
@@ -217,7 +217,7 @@ final class Fleet
                 throw new BizException('Transfer ' . $s['number'] . ' is not waiting to leave this warehouse.');
             }
         } else {
-            throw new BizException('Unknown stop.');
+            throw new \App\Libraries\Core\NotFoundException('Stop not found.');
         }
         $busy = Db::value("SELECT t.number FROM {trip_stops} ts JOIN {trips} t ON t.id = ts.trip_id WHERE ts.tenant_id = {tid} AND ts.kind = ? AND ts.doc_id = ? AND t.status IN ('planned','on_road') AND ts.status = 'pending'", [$kind, $docId]);
         if ($busy) {
@@ -269,7 +269,7 @@ final class Fleet
             Db::once($token, Auth::id(), static function () use ($tripId, $odometer) {
                 $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
                 if (! $trip) {
-                    throw new BizException('Unknown trip.');
+                    throw new \App\Libraries\Core\NotFoundException('Trip not found.');
                 }
                 Access::requireAt((int) $trip['warehouse_id'], 'dispatch.manage');
                 if ($trip['status'] !== 'planned') {

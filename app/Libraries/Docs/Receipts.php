@@ -205,7 +205,7 @@ final class Receipts
         $r = Db::row('SELECT r.*, w.code wh_code, w.name wh_name, s.name supplier, p.number po_number, u.name posted_name FROM {receipts} r JOIN {warehouses} w ON w.id = r.warehouse_id
                         LEFT JOIN {suppliers} s ON s.id = r.supplier_id LEFT JOIN {purchase_orders} p ON p.id = r.po_id LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.tenant_id = {tid} AND r.id = ?', [$id]);
         if (! $r) {
-            throw new BizException('Unknown receipt.');
+            throw new \App\Libraries\Core\NotFoundException('Receipt not found.');
         }
         return $r;
     }

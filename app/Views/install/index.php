@@ -23,24 +23,28 @@
   <div class="row2"><div class="field"><label for="db_name">Database name</label><input id="db_name" name="db_name" type="text" required value="<?= $o('db_name') ?>"><span class="hint">On cPanel it starts with your account name, e.g. acme_wms.</span></div><div class="field"><label for="db_prefix">Table prefix</label><input id="db_prefix" name="db_prefix" type="text" value="<?= $o('db_prefix', 'cw_') ?>"></div></div>
   <div class="row2"><div class="field"><label for="db_user">Database user</label><input id="db_user" name="db_user" type="text" required value="<?= $o('db_user') ?>"></div><div class="field"><label for="db_pass">Password</label><input id="db_pass" name="db_pass" type="password" autocomplete="off"></div></div>
 </fieldset>
-<fieldset><legend>Your company and first warehouse</legend>
-  <div class="row2"><div class="field"><label for="company">Company name</label><input id="company" name="company" type="text" required value="<?= $o('company') ?>"></div><div class="field"><label for="currency_symbol">Currency symbol</label><input id="currency_symbol" name="currency_symbol" type="text" maxlength="5" value="<?= $o('currency_symbol', 'K') ?>"></div></div>
-  <div class="row2"><div class="field"><label for="wh_code">Warehouse code</label><input id="wh_code" name="wh_code" type="text" required maxlength="20" value="<?= $o('wh_code', 'MAIN') ?>"></div><div class="field"><label for="wh_name">Warehouse name</label><input id="wh_name" name="wh_name" type="text" required value="<?= $o('wh_name', 'Main warehouse') ?>"></div></div>
+<fieldset><legend>Edition</legend>
+  <label class="check"><input type="radio" name="edition" value="single" <?= ($old['edition'] ?? 'single') === 'single' ? 'checked' : '' ?>><span><b>Single company</b>, for one organisation that keeps its own data. Your account is that organisation's <b>account owner</b>.</span></label><br>
+  <label class="check"><input type="radio" name="edition" value="saas" <?= ($old['edition'] ?? '') === 'saas' ? 'checked' : '' ?>><span><b>Online service</b> for many organisations. Your account is the <b>platform owner</b>: you add organisations, set their plans and modules, and never see their stock.</span></label>
+</fieldset>
+<fieldset><legend>Your company and first warehouse (single company only)</legend>
+  <div class="row2"><div class="field"><label for="company">Company name</label><input id="company" name="company" type="text" value="<?= $o('company') ?>"></div><div class="field"><label for="currency_symbol">Currency symbol</label><input id="currency_symbol" name="currency_symbol" type="text" maxlength="5" value="<?= $o('currency_symbol', 'K') ?>"></div></div>
+  <div class="row2"><div class="field"><label for="wh_code">Warehouse code</label><input id="wh_code" name="wh_code" type="text" maxlength="20" value="<?= $o('wh_code', 'MAIN') ?>"></div><div class="field"><label for="wh_name">Warehouse name</label><input id="wh_name" name="wh_name" type="text" value="<?= $o('wh_name', 'Main warehouse') ?>"></div></div>
   <div class="field"><label for="wh_town">Town</label><input id="wh_town" name="wh_town" type="text" value="<?= $o('wh_town') ?>"></div>
   <p class="hint">More warehouses, zones and bins are added afterwards under Warehouses and bins.</p>
 </fieldset>
-<fieldset><legend>Administrator (you)</legend>
-  <p class="hint">The administrator manages users, settings and the warehouse layout. To keep duties apart, the administrator cannot move or approve stock; that is done by the warehouse people.</p>
+<fieldset><legend>Your account</legend>
+  <p class="hint">Single company: the account owner, who may do everything and gives everyone else their roles and warehouses. Online service: the platform owner. You can sign in with the username or the e-mail address.</p>
   <div class="row2"><div class="field"><label for="admin_username">Username</label><input id="admin_username" name="admin_username" type="text" required value="<?= $o('admin_username', 'admin') ?>"></div><div class="field"><label for="admin_name">Your name</label><input id="admin_name" name="admin_name" type="text" required value="<?= $o('admin_name') ?>"></div></div>
   <div class="field"><label for="admin_email">E-mail</label><input id="admin_email" name="admin_email" type="email" value="<?= $o('admin_email') ?>"></div>
   <div class="row2"><div class="field"><label for="admin_password">Password</label><input id="admin_password" name="admin_password" type="password" required minlength="10" autocomplete="new-password"></div><div class="field"><label for="admin_password2">Password again</label><input id="admin_password2" name="admin_password2" type="password" required autocomplete="new-password"></div></div>
 </fieldset>
-<fieldset><legend>Warehouse manager (optional)</legend>
+<fieldset><legend>Warehouse manager (optional, single company)</legend>
   <p class="hint">A second account that runs the warehouses: items, suppliers and customers, purchasing, receiving, transfers, orders and dispatch, production, fleet, and approval of adjustments and counts. You can add it, and everyone else, later under Administration.</p>
   <div class="row2"><div class="field"><label for="manager_username">Username</label><input id="manager_username" name="manager_username" type="text" value="<?= $o('manager_username') ?>"></div><div class="field"><label for="manager_name">Name</label><input id="manager_name" name="manager_name" type="text" value="<?= $o('manager_name') ?>"></div></div>
   <div class="field"><label for="manager_password">Password</label><input id="manager_password" name="manager_password" type="password" minlength="10" autocomplete="new-password"></div>
 </fieldset>
-<label class="check"><input type="checkbox" name="demo" value="1"><span>Also load demo warehouses (LSK, KTW) with sample people, items and history, for trying the system. Demo users (wendy, steve, sally, paul, tom, anna, dora ...) have the password Demo-pass-2026.</span></label>
+<label class="check"><input type="checkbox" name="demo" value="1"><span>Also load the demo, for trying the system: Demo Distributors Ltd with warehouses LSK and KTW, sample people, items and history (single company: in your organisation). Online service: also Demo Foods, a second organisation. Demo users (wendy, steve, sally, paul, tom, anna, dora; fay and mia at Demo Foods) have the password Demo-pass-2026.</span></label>
 <button class="btn" type="submit">Install</button>
 </form>
 <?php else: ?><p>Fix the items above, then reload this page.</p><?php endif ?>

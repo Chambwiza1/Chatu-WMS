@@ -22,7 +22,7 @@ final class Waves
         $w = Db::row('SELECT v.*, w.code wh_code, w.name wh_name, u.name created_name, p.name picked_name FROM {pick_waves} v JOIN {warehouses} w ON w.id = v.warehouse_id
                        LEFT JOIN {users} u ON u.id = v.created_by LEFT JOIN {users} p ON p.id = v.picked_by WHERE v.tenant_id = {tid} AND v.id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $w) {
-            throw new BizException('Wave not found.');
+            throw new \App\Libraries\Core\NotFoundException('Wave not found.');
         }
         return $w;
     }

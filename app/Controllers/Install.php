@@ -31,13 +31,13 @@ class Install extends BaseController
             $res = Installer::install([
                 'base_url' => (string) ($in['base_url'] ?? ''), 'db_host' => (string) ($in['db_host'] ?? 'localhost'), 'db_port' => (string) ($in['db_port'] ?? '3306'),
                 'db_name' => (string) ($in['db_name'] ?? ''), 'db_user' => (string) ($in['db_user'] ?? ''), 'db_pass' => (string) ($in['db_pass'] ?? ''), 'db_prefix' => (string) ($in['db_prefix'] ?? 'cw_'),
-                'company' => (string) ($in['company'] ?? ''), 'currency_symbol' => (string) ($in['currency_symbol'] ?? 'K'),
+                'edition' => (string) ($in['edition'] ?? ''), 'company' => (string) ($in['company'] ?? ''), 'currency_symbol' => (string) ($in['currency_symbol'] ?? 'K'),
                 'wh_code' => (string) ($in['wh_code'] ?? 'MAIN'), 'wh_name' => (string) ($in['wh_name'] ?? 'Main warehouse'), 'wh_town' => (string) ($in['wh_town'] ?? ''),
                 'admin_username' => (string) ($in['admin_username'] ?? 'admin'), 'admin_name' => (string) ($in['admin_name'] ?? 'Administrator'), 'admin_email' => (string) ($in['admin_email'] ?? ''), 'admin_password' => (string) ($in['admin_password'] ?? ''),
                 'manager_username' => (string) ($in['manager_username'] ?? ''), 'manager_name' => (string) ($in['manager_name'] ?? ''), 'manager_password' => (string) ($in['manager_password'] ?? ''),
                 'demo' => ! empty($in['demo']), 'timezone' => (string) ($in['timezone'] ?? 'Africa/Lusaka'),
             ]);
-            return view('install/done', ['base' => $res['base_url'], 'demo' => ! empty($in['demo'])]);
+            return view('install/done', ['base' => $res['base_url'], 'demo' => ! empty($in['demo']), 'edition' => $res['edition']]);
         } catch (Throwable $e) {
             $msg = $e instanceof BizException ? $e->getMessage() : 'Installation failed: ' . $e->getMessage();
             log_message('error', 'Install failed: ' . $e->getMessage());

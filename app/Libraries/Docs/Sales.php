@@ -23,7 +23,7 @@ final class Sales
     {
         $so = Db::row('SELECT * FROM {sales_orders} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $so) {
-            throw new BizException('Unknown sales order.');
+            throw new \App\Libraries\Core\NotFoundException('Sales order not found.');
         }
         return $so;
     }

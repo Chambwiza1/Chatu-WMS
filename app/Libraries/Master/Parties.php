@@ -64,7 +64,7 @@ final class Parties
     {
         $r = Db::row("SELECT * FROM {{$table}} WHERE tenant_id = {tid} AND id = ?", [$id]);
         if (! $r) {
-            throw new BizException('Not found.');
+            throw new \App\Libraries\Core\NotFoundException(($table === 'suppliers' ? 'Supplier' : 'Customer') . ' not found.');
         }
         return $r;
     }

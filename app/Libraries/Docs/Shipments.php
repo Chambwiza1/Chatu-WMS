@@ -25,7 +25,7 @@ final class Shipments
     {
         $s = Db::row('SELECT * FROM {shipments} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $s) {
-            throw new BizException('Unknown shipment.');
+            throw new \App\Libraries\Core\NotFoundException('Shipment not found.');
         }
         return $s;
     }

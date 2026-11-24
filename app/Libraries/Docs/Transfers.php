@@ -29,7 +29,7 @@ final class Transfers
     {
         $t = Db::row('SELECT * FROM {transfers} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $t) {
-            throw new BizException('Unknown transfer.');
+            throw new \App\Libraries\Core\NotFoundException('Transfer not found.');
         }
         return $t;
     }

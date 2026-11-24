@@ -19,8 +19,10 @@ final class TestKit
         $this->c = $ctx;
     }
 
+    /** Act as a person of the demo company (Demo Distributors), inside that organisation. */
     public function as(string $user): self
     {
+        \App\Libraries\Core\Tenancy::set($this->c['tenant']);
         Auth::actAs($this->c['users'][$user]);
         return $this;
     }

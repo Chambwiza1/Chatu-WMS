@@ -22,14 +22,15 @@ final class Items
 
     public static function get(int $id): array
     {
-        if (! isset(self::$cache[$id])) {
+        $k = \App\Libraries\Core\Tenancy::require() . ':' . $id; // per organisation: a job may work for several in one run
+        if (! isset(self::$cache[$k])) {
             $r = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND id = ?', [$id]);
             if (! $r) {
-                throw new BizException('Unknown item.');
+                throw new \App\Libraries\Core\NotFoundException('Item not found.');
             }
-            self::$cache[$id] = $r;
+            self::$cache[$k] = $r;
         }
-        return self::$cache[$id];
+        return self::$cache[$k];
     }
 
     public static function bySku(string $sku): ?array
@@ -249,7 +250,7 @@ final class Items
             if ($id) {
                 $old = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
                 if (! $old) {
-                    throw new BizException('Unknown item.');
+                    throw new \App\Libraries\Core\NotFoundException('Item not found.');
                 }
                 $hasStock = (bool) Db::value('SELECT 1 FROM {movements} WHERE tenant_id = {tid} AND item_id = ? LIMIT 1', [$id]);
                 if ($hasStock && ($old['tracking'] !== $row['tracking'] || (int) $old['decimals'] > $row['decimals'])) {

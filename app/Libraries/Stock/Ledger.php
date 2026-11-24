@@ -59,7 +59,7 @@ final class Ledger
     {
         $b = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$binId]);
         if (! $b) {
-            throw new BizException('Unknown bin.');
+            throw new \App\Libraries\Core\NotFoundException('Bin not found.');
         }
         return $b;
     }

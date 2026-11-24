@@ -17,7 +17,7 @@ final class Trace
     {
         $lot = Db::row('SELECT l.*, i.sku, i.name item_name, i.uom, i.decimals, s.name supplier FROM {lots} l JOIN {items} i ON i.id = l.item_id LEFT JOIN {suppliers} s ON s.id = l.supplier_id WHERE l.tenant_id = {tid} AND l.id = ?', [$lotId]);
         if (! $lot) {
-            throw new BizException('Unknown batch.');
+            throw new \App\Libraries\Core\NotFoundException('Batch not found.');
         }
         $out = ['lot' => $lot];
         $out['received'] = Db::rows('SELECT r.id, r.number, r.received_on, r.kind, r.warehouse_id, w.code wh, s.name supplier, rl.qty_accepted, rl.qty_quarantine, rl.qty_rejected FROM {receipt_lines} rl
@@ -51,7 +51,7 @@ final class Trace
     {
         $s = Db::row('SELECT se.*, i.sku, i.name item_name, l.lot_no, c.name customer FROM {serials} se JOIN {items} i ON i.id = se.item_id LEFT JOIN {lots} l ON l.id = se.lot_id LEFT JOIN {customers} c ON c.id = se.customer_id WHERE se.tenant_id = {tid} AND se.id = ?', [$serialId]);
         if (! $s) {
-            throw new BizException('Unknown serial number.');
+            throw new \App\Libraries\Core\NotFoundException('Serial number not found.');
         }
         $s['history'] = Db::rows('SELECT m.*, w.code wh, fb.code from_bin, tb.code to_bin, u.name user FROM {movements} m JOIN {warehouses} w ON w.id = m.warehouse_id
                                     LEFT JOIN {bins} fb ON fb.id = m.from_bin_id LEFT JOIN {bins} tb ON tb.id = m.to_bin_id LEFT JOIN {users} u ON u.id = m.user_id WHERE m.tenant_id = {tid} AND m.serial_id = ? ORDER BY m.id', [$serialId]);

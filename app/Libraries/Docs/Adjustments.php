@@ -118,7 +118,7 @@ final class Adjustments
         Db::atomic(static function () use ($id, $note) {
             $a = Db::row('SELECT * FROM {adjustments} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
             if (! $a) {
-                throw new BizException('Unknown adjustment.');
+                throw new \App\Libraries\Core\NotFoundException('Adjustment not found.');
             }
             Access::requireAt((int) $a['warehouse_id'], 'stock.approve');
             if ($a['status'] !== 'pending') {
@@ -136,7 +136,7 @@ final class Adjustments
         Db::atomic(static function () use ($id, $note) {
             $a = Db::row('SELECT * FROM {adjustments} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
             if (! $a) {
-                throw new BizException('Unknown adjustment.');
+                throw new \App\Libraries\Core\NotFoundException('Adjustment not found.');
             }
             $self = (int) $a['created_by'] === Auth::id();
             if (! $self) {

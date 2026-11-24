@@ -30,7 +30,7 @@ final class Production
     {
         $r = Db::row('SELECT r.*, i.sku, i.name item_name, i.uom, i.tracking, i.decimals FROM {recipes} r JOIN {items} i ON i.id = r.output_item_id WHERE r.tenant_id = {tid} AND r.id = ?', [$id]);
         if (! $r) {
-            throw new BizException('Unknown recipe.');
+            throw new \App\Libraries\Core\NotFoundException('Recipe not found.');
         }
         $r['lines'] = Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking FROM {recipe_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.recipe_id = ? ORDER BY l.id', [$id]);
         return $r;
@@ -236,7 +236,7 @@ final class Production
             Db::once($token, Auth::id(), static function () use ($runId, $reason) {
                 $run = Db::row('SELECT * FROM {production_runs} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$runId]);
                 if (! $run) {
-                    throw new BizException('Unknown run.');
+                    throw new \App\Libraries\Core\NotFoundException('Production run not found.');
                 }
                 $wh = (int) $run['warehouse_id'];
                 Access::requireAt($wh, 'production.manage');
@@ -289,7 +289,7 @@ final class Production
                         FROM {production_runs} p JOIN {recipes} r ON r.id = p.recipe_id JOIN {items} i ON i.id = p.output_item_id JOIN {warehouses} w ON w.id = p.warehouse_id
                         JOIN {bins} b ON b.id = p.output_bin_id LEFT JOIN {lots} l ON l.id = p.lot_id LEFT JOIN {users} u ON u.id = p.posted_by WHERE p.tenant_id = {tid} AND p.id = ?', [$id]);
         if (! $r) {
-            throw new BizException('Unknown run.');
+            throw new \App\Libraries\Core\NotFoundException('Production run not found.');
         }
         $r['inputs'] = Db::rows('SELECT pi.*, i.sku, i.name, i.uom, i.decimals, l.lot_no, l.expiry_date, s.serial_no, b.code bin_code FROM {production_inputs} pi JOIN {items} i ON i.id = pi.item_id
                                    LEFT JOIN {lots} l ON l.id = pi.lot_id LEFT JOIN {serials} s ON s.id = pi.serial_id LEFT JOIN {bins} b ON b.id = pi.bin_id WHERE pi.tenant_id = {tid} AND pi.run_id = ? ORDER BY pi.id', [$id]);

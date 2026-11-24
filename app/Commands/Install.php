@@ -11,7 +11,7 @@ use Throwable;
  * Command-line installer for Linux servers.
  *   php spark wms:install                 (asks each question)
  *   php spark wms:install --non-interactive --base-url https://wms.example.com --db-name wms --db-user wms --db-pass ... \
- *        --company "Acme Ltd" --wh-code MAIN --wh-name "Main warehouse" --admin-password ... [--manager-username ... --manager-password ...] [--demo]
+ *        --edition single|saas --company "Acme Ltd" --wh-code MAIN --wh-name "Main warehouse" --admin-password ... [--manager-username ... --manager-password ...] [--demo]
  */
 class Install extends BaseCommand
 {
@@ -55,15 +55,16 @@ class Install extends BaseCommand
             'db_user'        => $ask('db-user', 'Database user', 'chatuwms'),
             'db_pass'        => $ask('db-pass', 'Database password', '', true),
             'db_prefix'      => $ask('db-prefix', 'Table prefix', 'cw_'),
-            'company'        => $ask('company', 'Company name', 'My Company Ltd'),
+            'edition'        => $ask('edition', 'Edition: single (one company) or saas (online service for many organisations)', 'single'),
+            'company'        => $ask('company', 'Company name (single company)', 'My Company Ltd'),
             'currency_symbol' => $ask('currency-symbol', 'Currency symbol', 'K'),
             'wh_code'        => $ask('wh-code', 'First warehouse code', 'MAIN'),
             'wh_name'        => $ask('wh-name', 'First warehouse name', 'Main warehouse'),
             'wh_town'        => $ask('wh-town', 'Town', ''),
-            'admin_username' => $ask('admin-username', 'Administrator username', 'admin'),
-            'admin_name'     => $ask('admin-name', 'Administrator name', 'Administrator'),
-            'admin_email'    => $ask('admin-email', 'Administrator e-mail', ''),
-            'admin_password' => $ask('admin-password', 'Administrator password (10+ characters, letters and numbers)', '', true),
+            'admin_username' => $ask('admin-username', 'Your username (account owner, or platform owner)', 'admin'),
+            'admin_name'     => $ask('admin-name', 'Your name', 'Administrator'),
+            'admin_email'    => $ask('admin-email', 'Your e-mail', ''),
+            'admin_password' => $ask('admin-password', 'Your password (10+ characters, letters and numbers)', '', true),
             'manager_username' => $ask('manager-username', 'Warehouse manager username (empty to skip)', ''),
             'manager_name'   => $ask('manager-name', 'Warehouse manager name', ''),
             'manager_password' => (string) (CLI::getOption('manager-password') ?? ''),

@@ -10,9 +10,10 @@ use Config\Database;
 use Throwable;
 
 /**
- * Installation, shared by the web installer (cPanel) and `php spark wms:install` (Linux).
- * Writes .env, creates the tables, seeds roles and reason codes, creates the first warehouse
- * and the first users, then writes writable/installed.lock.
+ * Installation, shared by the web installer and `php spark wms:install`.
+ * Writes .env, creates the tables, seeds the role templates, sets the edition (core 1.1, A1), then creates either the
+ * platform owner (online service for many organisations) or the one organisation with its first warehouse, its
+ * account owner and an optional warehouse manager (single company), then writes writable/installed.lock.
  */
 final class Installer
 {
@@ -49,11 +50,12 @@ final class Installer
 
     /**
      * @param array{base_url:string, db_host:string, db_port:int|string, db_name:string, db_user:string, db_pass:string, db_prefix:string,
-     *              company:string, currency_symbol:string, wh_code:string, wh_name:string, wh_town:string,
+     *              edition:string, company:string, currency_symbol:string, wh_code:string, wh_name:string, wh_town:string,
      *              admin_username:string, admin_name:string, admin_email:string, admin_password:string,
      *              manager_username?:string, manager_name?:string, manager_password?:string, demo?:bool, timezone?:string} $c
-     *        The administrator manages users, settings and the warehouse layout but cannot move or approve stock
-     *        (segregation of duties). The optional manager account runs the warehouses.
+     *        edition "saas": the account is the platform owner, who adds organisations and sees none of their stock.
+     *        edition "single": the organisation is created from company/wh_*, and the account is its account owner.
+     *        The optional manager account runs the warehouses (single company only).
      */
     public static function install(array $c): array
     {
@@ -69,6 +71,10 @@ final class Installer
         if (! preg_match('#^https?://#', $base)) {
             throw new BizException('The site address must start with http:// or https://.');
         }
+        $edition = (string) ($c['edition'] ?? '');
+        if (! in_array($edition, ['saas', 'single'], true)) {
+            throw new BizException('Choose the edition: online service for many organisations, or one organisation on its own server.');
+        }
         $prefix = preg_replace('/[^a-z0-9_]/', '', strtolower($c['db_prefix'] ?? 'cw_'));
         if ($err = Auth::validatePassword((string) $c['admin_password'])) {
             throw new BizException('Administrator password: ' . $err);
@@ -78,7 +84,7 @@ final class Installer
                 throw new BizException('Usernames: 3 to 60 letters, digits, dot, dash or underscore.');
             }
         }
-        $withManager = trim((string) ($c['manager_username'] ?? '')) !== '';
+        $withManager = $edition === 'single' && trim((string) ($c['manager_username'] ?? '')) !== '';
         if ($withManager) {
             if ($err = Auth::validatePassword((string) ($c['manager_password'] ?? ''))) {
                 throw new BizException('Manager password: ' . $err);
@@ -87,7 +93,7 @@ final class Installer
                 throw new BizException('The administrator and the manager are two different accounts: choose two usernames.');
             }
         }
-        if (trim((string) $c['company']) === '' || trim((string) $c['wh_code']) === '' || trim((string) $c['wh_name']) === '') {
+        if ($edition === 'single' && (trim((string) $c['company']) === '' || trim((string) $c['wh_code']) === '' || trim((string) $c['wh_name']) === '')) {
             throw new BizException('Give the company name and the first warehouse\'s code and name.');
         }
 
@@ -122,28 +128,43 @@ final class Installer
         $runner->setNamespace('App');
         $runner->latest();
 
-        // 2. reference data, first warehouse, users
+        // 2. edition, then the platform owner or the one organisation
         Db::reset($conn);
+        \App\Libraries\Core\Settings::flush();
         Seed::base();
-        $result = Db::atomic(static function () use ($c, $withManager) {
-            \App\Libraries\Core\Settings::set('company_name', trim($c['company']));
-            \App\Libraries\Core\Settings::set('currency_symbol', trim($c['currency_symbol'] ?: 'K'));
-            $admin = Seed::user(strtolower(trim($c['admin_username'])), trim($c['admin_name']) ?: 'Administrator', $c['admin_password'], trim($c['admin_email']) ?: null, [['system_admin', 'system', null]], 'System administrator');
-            Auth::actAs($admin);
-            $wh = \App\Libraries\Master\Warehouses::create(['code' => $c['wh_code'], 'name' => $c['wh_name'], 'town' => $c['wh_town'] ?? '']);
-            $mgr = null;
-            if ($withManager) {
-                $mgr = Seed::user(strtolower(trim($c['manager_username'])), trim($c['manager_name'] ?? '') ?: 'Warehouse manager', $c['manager_password'], null,
-                    [['warehouse_manager', 'system', null], ['buyer', 'system', null], ['sales_clerk', 'system', null], ['production', 'system', null], ['transport', 'system', null]], 'Warehouse manager');
+        $result = Db::atomic(static function () use ($c, $withManager, $edition) {
+            \App\Libraries\Core\Settings::set('edition', $edition);
+            \App\Libraries\Core\Settings::set('installed_at', Db::now());
+            \App\Libraries\Core\Settings::set('app_version', \App\Libraries\Core\Audit::APP_VERSION);
+            $owner = ['username' => strtolower(trim($c['admin_username'])), 'name' => trim($c['admin_name']) ?: 'Administrator', 'email' => trim((string) $c['admin_email']), 'password' => $c['admin_password']];
+            if ($edition === 'saas') {
+                $uid = Seed::login($owner['username'], $owner['name'], $owner['password'], $owner['email'] ?: null, 'Platform owner');
+                Seed::platformRole($uid);
+                return ['admin' => $uid, 'tenant' => null, 'warehouse' => null, 'manager' => null];
             }
-            Db::exec("INSERT INTO {settings} (name, value) VALUES ('installed_at', ?), ('app_version', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [Db::now(), \App\Libraries\Core\Audit::APP_VERSION]);
-            return ['warehouse' => $wh, 'admin' => $admin, 'manager' => $mgr];
+            $t = \App\Libraries\Platform\Tenants::create(['name' => trim((string) $c['company']), 'slug' => trim((string) $c['company']), 'timezone' => (string) ($c['timezone'] ?? 'Africa/Lusaka'),
+                'location_code' => $c['wh_code'], 'location_name' => $c['wh_name'], 'location_town' => $c['wh_town'] ?? '', 'owner' => $owner], true);
+            return \App\Libraries\Core\Tenancy::run((int) $t['tenant'], static function () use ($c, $t, $withManager) {
+                \App\Libraries\Core\Settings::set('currency_symbol', trim($c['currency_symbol'] ?: 'K'));
+                $mgr = null;
+                if ($withManager) {
+                    $mgr = Seed::user(strtolower(trim($c['manager_username'])), trim($c['manager_name'] ?? '') ?: 'Warehouse manager', $c['manager_password'], null,
+                        [['warehouse_manager', 'system', null], ['buyer', 'system', null], ['sales_clerk', 'system', null], ['production', 'system', null], ['transport', 'system', null]], 'Warehouse manager');
+                }
+                return ['admin' => $t['owner'], 'tenant' => (int) $t['tenant'], 'warehouse' => $t['location'], 'manager' => $mgr];
+            });
         });
         if (! empty($c['demo'])) {
-            Demo::samples(Demo::build());
+            @set_time_limit(600);
+            $demo = Demo::build($result['tenant']);
+            Demo::samples($demo);
+            if ($edition === 'saas') {
+                Demo::second($demo);
+            }
         }
         Auth::actAs(null);
-        \App\Libraries\Core\Audit::log('system.install', 'system', null, null, ['version' => \App\Libraries\Core\Audit::APP_VERSION, 'base_url' => $base]);
+        \App\Libraries\Core\Tenancy::set(null);
+        \App\Libraries\Core\Audit::log('system.install', 'system', null, null, ['version' => \App\Libraries\Core\Audit::APP_VERSION, 'edition' => $edition, 'base_url' => $base]);
         } catch (Throwable $e) {
             try {
                 $conn->query('SET FOREIGN_KEY_CHECKS = 0');
@@ -186,7 +207,7 @@ final class Installer
         }
         @chmod(ROOTPATH . '.env', 0640);
         file_put_contents(self::lockFile(), date('c') . "\n");
-        return $result + ['base_url' => $base];
+        return $result + ['base_url' => $base, 'edition' => $edition];
     }
 
     private static function envValue(string $v): string

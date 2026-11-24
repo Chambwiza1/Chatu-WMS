@@ -19,7 +19,7 @@ final class Purchasing
     {
         $po = Db::row('SELECT * FROM {purchase_orders} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $po) {
-            throw new BizException('Unknown purchase order.');
+            throw new \App\Libraries\Core\NotFoundException('Purchase order not found.');
         }
         return $po;
     }
