@@ -4,7 +4,7 @@ By Chatu Innovations. Support: info@chatuzm.com, +260 773818370 / +260 979913497
 
 A standalone warehouse management system for distributors, manufacturers and depots. Every unit of stock is in one place (warehouse, bin, batch, serial number, status), every change is in an append-only ledger, and stock is valued at FIFO cost. Built on the Chatu Assets platform: the same sign-in, duty-based roles, hash-chained audit log, installer and look.
 
-Version 0.2.1 (core 1.1: one sign-in per account, /health, the expired-page message, aligned forms). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
+Version 0.3.0 (the ChatuERP core: organisations, one login per person, the beta12 access model, the platform console, plans and billing). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
 
 ## What it does
 
@@ -42,7 +42,9 @@ Version 0.2.1 (core 1.1: one sign-in per account, /health, the expired-page mess
 
 **Reports.** Stock on hand (free, reserved, to put away, held, expired, damaged), stock by bin, expiry, reorder, movements, FIFO valuation including goods in transit, transit, dispatches for invoicing, losses and write-offs, production yield and cost, fleet use. All export to CSV.
 
-**Control.** Roles are given for the whole company or for one warehouse. Duties that must stay apart (administrator and approver, storekeeper and the accountant who approves their counts) cannot be combined. Nobody approves their own adjustment or count. Every action is in a hash-chained audit log, and a nightly integrity check proves that every bin agrees with the ledger, the FIFO layers agree with the stock, reservations add up, serial numbers are where the records say, and nobody edited the audit log.
+**Organisations.** One installation serves one company (single company) or many (online service). Each organisation's data is kept apart down to the database keys; a person has one login and switches between the organisations they belong to. The platform owner adds organisations, sets their plans, limits and modules, and invoices them; they can pay online by mobile money (Lenco) or card (DPO).
+
+**Control.** Each organisation keeps its own roles (copies of the ones below, to change as it likes) and can give a person extra permissions directly, all on one grid: Select, View, Create, Edit, Delete and the module's actions. A person works at every warehouse or at a list of them. Duties that must stay apart (administrator and approver, storekeeper and the accountant who approves their counts) cannot be combined. Nobody approves their own adjustment or count. Every action is in a hash-chained audit log, and a nightly integrity check proves that every bin agrees with the ledger, the FIFO layers agree with the stock, reservations add up, serial numbers are where the records say, and nobody edited the audit log.
 
 ## Roles
 
@@ -62,6 +64,16 @@ Version 0.2.1 (core 1.1: one sign-in per account, /health, the expired-page mess
 ## Not in this version
 
 Invoicing and payments (by design: export the dispatch report to the accounting system), a link to ChatuPOS shops (kept fully separate for now), and route optimisation. Offline use is look-up only: receiving, moving and dispatching need the network, so that two people cannot sell or move the same unit.
+
+## Changes in 0.3.0
+
+- Organisations: every table keyed by organisation, with links that cannot cross; codes and document numbers per organisation.
+- Editions chosen at install: single company or online service; an updated 0.2 installation becomes a single company.
+- The platform console: organisations, plans with limits on warehouses and people, invoices, trials, module rules (Production, Fleet), online payment, the integrity check of every organisation, one update for all of them.
+- People and access as in ChatuPOS 2.0: own roles, direct permissions, one grid with a Select column, warehouses per person; refusals name the module and the box; nobody changes their own access.
+- New messages pop up and stay until opened or closed.
+
+Notes: `RELEASE_0_3_0.md`.
 
 ## Changes in 0.2.1
 

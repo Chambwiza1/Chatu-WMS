@@ -26,6 +26,10 @@ final class Audit
         ?string $effectiveDate = null,
         ?int $onBehalfOf = null
     ): void {
+        if (! self::chains()) {
+            self::legacyLog($action, $objectType, $objectId, $before, $after, $outcome, $detail);
+            return;
+        }
         $write = static function () use ($action, $objectType, $objectId, $before, $after, $outcome, $detail, $requestId, $effectiveDate, $onBehalfOf) {
             $user = Auth::user();
             $ctx  = self::context();
@@ -61,6 +65,43 @@ final class Audit
             Db::exec('UPDATE {audit_heads} SET head = ? WHERE tenant_key = ?', [$row['hash'], $key]);
         };
         Db::atomic($write);
+    }
+
+    private static ?bool $chains = null;
+
+    /** True once the database has the 0.3.0 chains (audit_heads); before the update, the one 0.2 chain is kept. */
+    private static function chains(): bool
+    {
+        return self::$chains ??= (bool) Db::value('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [Db::t('audit_heads')]);
+    }
+
+    /** Sign-ins and refusals while the database waits for the 0.3.0 update are logged the 0.2 way, so the update can still check that chain. */
+    private static function legacyLog(string $action, ?string $objectType, $objectId, ?array $before, ?array $after, string $outcome, ?string $detail): void
+    {
+        Db::atomic(static function () use ($action, $objectType, $objectId, $before, $after, $outcome, $detail) {
+            $user = Auth::user();
+            $ctx  = self::context();
+            $prev = (string) (Db::value("SELECT value FROM {settings} WHERE name = 'audit_head' FOR UPDATE") ?? str_repeat('0', 64));
+            $mt   = microtime(true);
+            $row  = ['at' => gmdate('Y-m-d H:i:s', (int) $mt) . '.' . str_pad((string) ((int) ($mt * 1000) % 1000), 3, '0', STR_PAD_LEFT), 'effective_date' => null,
+                'user_id' => $user['id'] ?? null, 'username' => $user['username'] ?? ($ctx['actor'] ?? null), 'on_behalf_of' => null, 'ip' => $ctx['ip'], 'user_agent' => $ctx['ua'],
+                'app_version' => self::APP_VERSION, 'device_id' => $ctx['device'], 'action' => $action, 'object_type' => $objectType, 'object_id' => $objectId === null ? null : (string) $objectId,
+                'request_id' => null, 'before_json' => $before === null ? null : json_encode($before, JSON_UNESCAPED_UNICODE), 'after_json' => $after === null ? null : json_encode($after, JSON_UNESCAPED_UNICODE),
+                'outcome' => $outcome, 'detail' => $detail === null ? null : mb_substr($detail, 0, 500), 'prev_hash' => $prev];
+            $parts = [];
+            foreach (['at', 'effective_date', 'user_id', 'username', 'on_behalf_of', 'ip', 'user_agent', 'app_version', 'device_id', 'action', 'object_type', 'object_id', 'request_id', 'before_json', 'after_json', 'outcome', 'detail', 'prev_hash'] as $f) {
+                $parts[] = $row[$f] === null ? "\0" : (string) $row[$f];
+            }
+            $row['hash'] = hash('sha256', implode("\x1f", $parts));
+            Db::conn()->table('audit_events')->insert($row);
+            Db::exec("INSERT INTO {settings} (name, value) VALUES ('audit_head', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [$row['hash']]);
+        });
+    }
+
+    /** Forget whether the chains exist (after the update ran in this request). */
+    public static function flush(): void
+    {
+        self::$chains = null;
     }
 
     /** Log a refusal. Called after any rollback so the entry survives. */

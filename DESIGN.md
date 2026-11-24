@@ -110,3 +110,32 @@ Shared with every ChatuERP product; see `claude/CHATUERP_CORE.md` in the project
   - it reads the session itself rather than `Auth`, because it runs before the organisation is known.
 - **`/health`** (`Cron::health`, no sign-in): 200 while the scheduled job is recent, otherwise 503, with the job's age and the version.
 - **Form rows** (`.row2`, `.row3`): each field spans three subgrid rows, so labels, boxes and hints line up across the row.
+
+## 0.3.0: the ChatuERP core (24 November 2026)
+
+Core 1.1 and 1.5 of `claude/CHATUERP_CORE.md`, as in ChatuPOS 2.0.0-beta27. The warehouse code and screens are unchanged in what they do; the core underneath is ChatuPOS's.
+
+- **Organisations** (`Core\Tenancy`, `Core\Db`).
+  - Every warehouse table has `tenant_id`, a unique key on `(tenant_id, id)`, and its links to other warehouse tables are `(tenant_id, column) -> parent(tenant_id, id)`. Codes and document numbers are unique per organisation.
+  - One program does this for every table (`Setup\UpgradeCore::v030`). Fresh installs and updates from 0.2 pass through it, so both end in the same schema.
+  - The tenant guard: any SQL naming an organisation's table must name `tenant_id`, or it is refused. `{tid}` in SQL stands for the current organisation (none chosen: refused). `Db::insert` fills `tenant_id` for organisation tables. Platform code that looks across organisations wraps itself in `Db::unscoped()`.
+  - Another organisation's id answers "not found" (`NotFoundException`, 404).
+  - Settings in two layers: the installation's (`settings`) and the organisation's (`tenant_settings`). `Settings::get()` picks the layer by name.
+  - The audit log has one chain per organisation and one for the platform (`audit_heads`). On update, the 0.2 chain is checked with the old rule and, when intact, sealed again with the organisation in each hash (`audit.resealed` records the old head).
+- **People** (`Core\Auth`, `Core\Access`, `Core\Rights`, `Admin\Users`, `Admin\Roles`).
+  - One login per person, by username or e-mail. Memberships in `tenant_users`. Someone in several organisations chooses one, and can switch from the header.
+  - Access as in ChatuPOS beta12: the organisation's own roles (copies of the templates, `roles.template`) plus permissions given directly (`member_permissions`), at every warehouse (`all_warehouses`) or a list (`member_warehouses`). The account owner may do everything everywhere.
+  - `Rights::MODULES` lays the codes out as one grid: Select, View, Create, Edit, Delete, Actions and Supervisor. `item.manage`, `supplier.manage`, `customer.manage` and `admin.users` became their Select to Delete codes (`Rights::RENAMED`). Holders of a duty were given the pickers it needs (`Rights::ADDED`).
+  - The old API names stay: `companyWide`, `warehouses`, `canAt`, `requireAt`, `whereWarehouse`, `usersWith`.
+  - Refusals name the module and the box: "You do not have permission to do this: Items, Create (item.create)".
+  - Nobody changes their own access or a role they hold. The account owner cannot be switched off. The last person who can change people's access keeps it.
+  - On update, everyone keeps exactly what they could do: a role for the whole company gives every warehouse, a role at a warehouse gives that warehouse. This was checked person by person on the demo database.
+- **Platform** (`Platform\Tenants`, `Billing`, `Pay`, `Modules`, `Product`; controllers `Platform`, `PlatformBilling`, `Billing`, `PayPublic`, `Update`).
+  - Edition at install: single company or online service. `edition` defaults to single, which is what an updated 0.2 installation is.
+  - The console: organisations and their counts (never their stock), status with a reason, plans with limits on warehouses and people, invoices, trials, module rules (Production, Fleet), the platform's Lenco and DPO keys, the integrity check over every organisation (`Reports\Integrity`), and the platform audit log.
+  - `Billing`, `Pay` and `Modules` are the files shared by every product, unchanged. `Product` is Warehouse's own: its limits (warehouses and people), its modules, and what keeps a module on (active recipes; trips planned or on the road).
+  - A module that is off leaves the menu, its pages answer 404, and nothing new can be started in it (`Modules::require`).
+  - A suspended organisation can look things up and pay, nothing else.
+  - The update (A9): new files on an old database send every page to `/update`. There the platform owner, or the administrator in the single-company edition, updates every organisation at once. Before organisations exist, sign-ins are logged to the 0.2 chain so the update can still check it.
+  - The scheduled job: platform work (e-mail, payments, the daily billing check, the integrity check), then each organisation's own work (its stock check and reminders), within 45 seconds.
+- **Messages pop up** (E2): the newest three unread stay on every page until opened or closed with ×; Close all hides them until the next sign-in; a tone that each device can mute (`/live`, `Notify::popups`).

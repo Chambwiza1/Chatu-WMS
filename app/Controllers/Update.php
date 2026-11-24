@@ -29,7 +29,7 @@ class Update extends BaseController
         try {
             if (! Db::value("SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?", [Db::t('tenants')])) {
                 // 0.2.x: one company, roles held for the whole company or a warehouse
-                return (bool) Db::value("SELECT 1 FROM {user_roles} ur JOIN {role_permissions} rp ON rp.role_id = ur.role_id WHERE ur.user_id = ? AND rp.permission_code = 'admin.settings' LIMIT 1", [Auth::id()]);
+                return (bool) Db::unscoped(static fn () => Db::value("SELECT 1 FROM {user_roles} ur JOIN {role_permissions} rp ON rp.role_id = ur.role_id WHERE ur.user_id = ? AND rp.permission_code = 'admin.settings' LIMIT 1", [Auth::id()]));
             }
             if (Access::platform('platform.settings')) {
                 return true;
@@ -79,6 +79,7 @@ class Update extends BaseController
             return redirect()->to(site_url('update'));
         }
         \App\Libraries\Core\Db::reset();
+        \App\Libraries\Core\Audit::flush();
         Settings::flush();
         Settings::set('app_version', Audit::APP_VERSION);
         cache()->delete(UpdateFilter::cacheKey());

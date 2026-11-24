@@ -1,6 +1,6 @@
 <?= $this->extend('layout') ?>
 <?= $this->section('content') ?>
-<div class="page-head"><div><h1>Audit log</h1><p class="sub">Every sign-in, change, decision, posting and refusal. Records cannot be edited; each carries a hash of the one before it.</p></div>
+<div class="page-head"><div><h1><?= ($platform ?? false) ? 'Platform audit log' : 'Audit log' ?></h1><p class="sub"><?= ($platform ?? false) ? 'Platform actions: organisations added and changed, plans and invoices, installs, updates, sign-ins outside an organisation.' : 'Every sign-in, change, decision, posting and refusal in ' . esc($org['name'] ?? '') . '.' ?> Records cannot be edited; each carries a hash of the one before it in this chain.</p></div>
 <div class="actions"><a class="btn secondary" href="<?= current_url() . '?' . http_build_query(array_merge($f, ['verify' => 1])) ?>">Check the chain</a>
 <?php if (can('data.export')): ?><a class="btn secondary" href="<?= current_url() . '?' . http_build_query(array_merge($f, ['export' => 'csv'])) ?>">Download CSV</a><?php endif ?></div></div>
 <?php if ($verify): ?><div class="flash <?= str_starts_with($verify, 'The chain is intact') ? 'ok' : 'err' ?>"><?= esc($verify) ?></div><?php endif ?>

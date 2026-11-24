@@ -21,6 +21,7 @@ final class PlatformTools
         $runner->setNamespace('App');
         $runner->latest();
         \App\Libraries\Core\Db::reset();
+        \App\Libraries\Core\Audit::flush();
         Settings::flush();
         Settings::set('app_version', Audit::APP_VERSION);
         cache()->delete(\App\Filters\UpdateFilter::cacheKey());

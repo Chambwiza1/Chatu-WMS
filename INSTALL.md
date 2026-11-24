@@ -129,22 +129,25 @@ sudo crontab -u www-data -e
 
 ## After installing
 
-1. **Sign in as the administrator.** Under **Warehouses and bins** add your other warehouses, then zones and racks of bins (a rack at a time: prefix, aisles, bays, levels). Print barcode bin labels from the warehouse page (A4 label sheets of 3 × 8, or a label printer).
-2. **Administration > Users and roles**: add each person and give them their roles, for the whole company or for one warehouse. The administrator cannot give roles to themselves, and cannot move or approve stock.
+0. **The edition.** The installer asks: **single company** (you are the account owner of your one organisation) or **online service** for many organisations (you are the platform owner: add each organisation under **Organisations > New organisation**, with its first warehouse and its account owner, who then follows the steps below in their organisation).
+1. **Sign in as the account owner.** Under **Warehouses and bins** add your other warehouses, then zones and racks of bins (a rack at a time: prefix, aisles, bays, levels). Print barcode bin labels from the warehouse page (A4 label sheets of 3 × 8, or a label printer).
+2. **Administration > People and access**: add each person, tick their roles, choose their warehouses (all, or a list), and tick any extra permissions on the grid. Nobody changes their own access. **Roles** lets you change what each role may do, copy one, or add your own.
 3. **Settings**: company name, address and TPIN, your logo (printed on delivery notes and other documents), currency symbol and code (ZMW; purchase orders can be in other currencies), the automatic limits for adjustments and counts (0 = always a second person), expiry and fleet warning periods, e-mail.
 4. **The warehouse manager or buyer** adds items (with their tracking: batch, serial, expiry), suppliers and customers.
 5. **Opening stock**: Goods received > Opening stock. Count each bin first; give batch numbers, expiry dates and serial numbers where items are tracked, and the cost. It needs the "enter opening stock" duty (warehouse manager).
 6. **Check** Administration > Integrity check shows everything agrees.
 
-## Updating from an earlier version (0.1 to 0.2)
+## Updating from an earlier version (0.1, 0.2 to 0.3)
 
-Your data stays where it is; only the program files are replaced and the database gets the new columns and tables.
+Your data stays where it is; only the program files are replaced and the database gets the new columns and tables. From 0.3.0, once the new files are in place every page goes to the update page until the database is updated, so nobody works on a half-updated system.
+
+**0.2 to 0.3** turns your company into an organisation of the single-company edition: its name, settings, data and history are kept, and everyone keeps exactly what they could do. Each person's roles now apply at the warehouses they are given (a role for the whole company gives every warehouse).
 
 1. **Back up** the database (cPanel > phpMyAdmin > Export, or `mysqldump`) and the `writable/uploads` folder.
 2. **Copy the new files over the old ones.** Extract the new zip on top of the existing folder. The zip contains no `.env`, no `writable/` data and no `installed.lock`, so your settings, uploads and installation are kept.
 3. **Update the database**, either way:
    - on a server with a terminal: `php spark migrate --all` in the application folder;
-   - on cPanel without a terminal: sign in as the administrator and open **Administration**. A yellow panel says a database update is needed; press **Update the database**.
+   - without a terminal: open the site, sign in as the administrator (or, online service, the platform owner) and press **Update the database** on the update page. One update covers every organisation.
 4. Open **Administration > Integrity check** and run it: it should say everything agrees.
 
 The update can be run more than once safely: it only adds what is missing. Users may need to reload the page once (or close and reopen the installed app) to get the new look and the offline look-up.
@@ -155,4 +158,4 @@ The update can be run more than once safely: it only adds what is missing. Users
 
 ## Demo accounts
 
-If you ticked demo data, the warehouses LSK (Lusaka) and KTW (Kitwe) exist with history (including packs on rice and milk, an open purchase order in US dollars, a pick wave of two orders and vehicles with Chatu Assets numbers), and these users, all with the password `Demo-pass-2026`: wendy (warehouse manager LSK), kalo (manager KTW), steve (storekeeper LSK), kim (storekeeper KTW), bella (buyer), sally (sales), paul (production), tom (transport), anna (accountant), dora (director), olive (auditor), sam (administrator). Switch them off before live use.
+If you ticked demo data, Demo Distributors Ltd has the warehouses LSK (Lusaka) and KTW (Kitwe) exist with history (including packs on rice and milk, an open purchase order in US dollars, a pick wave of two orders and vehicles with Chatu Assets numbers), and these users, all with the password `Demo-pass-2026`: wendy (warehouse manager LSK), kalo (manager KTW), steve (storekeeper LSK), kim (storekeeper KTW), bella (buyer), sally (sales), paul (production), tom (transport), anna (accountant), dora (director), olive (auditor), sam (administrator). Online service: also Demo Foods, with fay (its account owner) and mia (storekeeper there, auditor at Demo Distributors: she chooses the organisation when she signs in). Switch them off before live use.
