@@ -9,6 +9,10 @@ use Throwable;
 /**
  * Database helpers: one connection, nested-safe transactions, one-time operation tokens,
  * table prefixing for raw SQL. Every business write runs inside Db::atomic().
+ *
+ * core 1.1 (as ChatuPOS): the tenant guard. A query naming an organisation's table must name tenant_id, and {tid} in
+ * SQL stands for the current organisation's id (an integer; none chosen = refused). Inserts into an organisation's
+ * table take the current organisation unless they name one.
  */
 final class Db
 {
@@ -54,6 +58,7 @@ final class Db
     public static function q(string $sql, array $binds = [])
     {
         $db = self::conn();
+        self::guard($sql);
         try {
             $res = $db->query(self::expand($sql), $binds);
         } catch (\CodeIgniter\Database\Exceptions\DatabaseException $e) {
@@ -94,16 +99,58 @@ final class Db
     public static function insert(string $table, array $data): int
     {
         $db   = self::conn();
+        if (in_array($table, Tenancy::TABLES, true) && ! array_key_exists('tenant_id', $data)) {
+            if (self::$unscoped > 0) {
+                throw new DbError('Tenant guard: insert into ' . $table . ' without tenant_id.');
+            }
+            $data = ['tenant_id' => Tenancy::require()] + $data;
+        }
         $cols = implode(', ', array_map(static fn ($c) => $db->escapeIdentifiers($c), array_keys($data)));
         $ph   = implode(', ', array_fill(0, count($data), '?'));
         self::q('INSERT INTO ' . $db->escapeIdentifiers(self::t($table)) . " ($cols) VALUES ($ph)", array_values($data));
         return (int) $db->insertID();
     }
 
-    /** Replace {name} with the prefixed table name. */
+    /** Replace {name} with the prefixed table name and {tid} with the current organisation's id. */
     public static function expand(string $sql): string
     {
-        return preg_replace_callback('/\{([a-z_]+)\}/', static fn ($m) => self::t($m[1]), $sql);
+        return preg_replace_callback('/\{([a-z_]+)\}/', static fn ($m) => $m[1] === 'tid' ? (string) Tenancy::require() : self::t($m[1]), $sql);
+    }
+
+    /** The current organisation's id for binds (refused when none is chosen). */
+    public static function tid(): int
+    {
+        return Tenancy::require();
+    }
+
+    /**
+     * Tenant guard. A query that names an organisation's table ({items}, {stock}, ...) must also name tenant_id, so a
+     * lookup by id alone can never reach another organisation's row. It runs on every query, in production too:
+     * failing closed is better than showing one organisation's data to another. Platform code that really works
+     * across organisations (the console, sign-in, the integrity check) wraps itself in unscoped().
+     */
+    private static function guard(string $sql): void
+    {
+        if (self::$unscoped > 0 || ! preg_match_all('/\{([a-z_]+)\}/', $sql, $m)) {
+            return;
+        }
+        $hit = array_intersect($m[1], Tenancy::TABLES);
+        if ($hit && stripos($sql, 'tenant_id') === false) {
+            throw new DbError('Tenant guard: query on ' . implode(', ', array_unique($hit)) . ' without tenant_id.');
+        }
+    }
+
+    private static int $unscoped = 0;
+
+    /** Run $fn with the tenant guard off. Only for platform code that is meant to see every organisation. */
+    public static function unscoped(callable $fn)
+    {
+        self::$unscoped++;
+        try {
+            return $fn();
+        } finally {
+            self::$unscoped--;
+        }
     }
 
     /**
@@ -171,11 +218,5 @@ final class Db
         $result = $fn();
         self::exec('UPDATE {op_tokens} SET result = ? WHERE token = ?', [json_encode($result), $token]);
         return $result;
-    }
-
-    /** Record that an object changed, for the offline delta sync. */
-    public static function touch(string $type, int $id): void
-    {
-        self::exec('INSERT INTO {sync_changes} (object_type, object_id, changed_at) VALUES (?, ?, ?)', [$type, $id, self::now()]);
     }
 }

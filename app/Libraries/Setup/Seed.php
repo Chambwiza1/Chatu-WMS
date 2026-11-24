@@ -3,40 +3,23 @@
 namespace App\Libraries\Setup;
 
 use App\Libraries\Core\Db;
+use App\Libraries\Core\Rights;
+use App\Libraries\Core\Tenancy;
 
 /**
  * Reference data: permissions, duty roles, segregation-of-duties rules, reason codes.
  * Additive: running it again on an upgraded installation adds what is new and keeps local changes.
+ *
+ * core 1.1 (0.3.0): the organisation's permissions are in Core\Rights; the roles here are templates (tenant_id NULL)
+ * that every organisation copies to change as it likes; reason codes belong to each organisation.
  */
 final class Seed
 {
-    public const PERMISSIONS = [
-        'stock.view'        => 'See stock, documents and movements at the warehouse',
-        'stock.view_cost'   => 'See costs and stock values',
-        'item.manage'       => 'Maintain items and categories',
-        'supplier.manage'   => 'Maintain suppliers',
-        'customer.manage'   => 'Maintain customers',
-        'purchase.manage'   => 'Raise, issue and close purchase orders',
-        'receive.post'      => 'Receive goods and return goods to suppliers',
-        'stock.opening'     => 'Enter opening stock balances',
-        'inventory.move'    => 'Put away and move stock; put stock on hold or in quarantine',
-        'lot.hold'          => 'Hold, recall and release batches',
-        'transfer.manage'   => 'Raise, allocate and dispatch transfers from the warehouse',
-        'transfer.receive'  => 'Receive transfers into the warehouse',
-        'sales.manage'      => 'Take, confirm and cancel sales orders',
-        'dispatch.manage'   => 'Pick, pack and dispatch orders; record deliveries and returns',
-        'production.manage' => 'Post and void production runs; maintain recipes',
-        'fleet.manage'      => 'Maintain vehicles and drivers; plan and close trips',
-        'adjust.request'    => 'Raise stock adjustments',
-        'count.manage'      => 'Start, submit and cancel stock counts',
-        'count.enter'       => 'Enter counted quantities',
-        'stock.approve'     => 'Approve adjustments and count results; release stock from quarantine (never your own)',
-        'report.view'       => 'Run reports',
-        'data.export'       => 'Export data to CSV',
-        'warehouse.setup'   => 'Maintain warehouses, zones and bins',
-        'admin.users'       => 'Maintain users and their roles',
-        'admin.settings'    => 'Maintain system settings and reason codes',
-        'audit.view'        => 'See the audit log',
+    /** Platform permissions (the SaaS operator only); the organisation's permissions are in Core\Rights. */
+    public const PLATFORM = [
+        'platform.tenants'  => 'See and manage organisations on the platform (no access to their stock)',
+        'platform.settings' => 'Keep platform settings, the scheduled job and the integrity check',
+        'platform.audit'    => 'See the platform audit log',
     ];
 
     /** code => [name, rank, description, permissions] */
@@ -51,6 +34,7 @@ final class Seed
         'accountant'        => ['Accountant', 4, 'Sees costs and values, approves adjustments and counts.', ['stock.view', 'stock.view_cost', 'stock.approve', 'report.view', 'data.export', 'audit.view']],
         'auditor'           => ['Auditor (read-only)', 1, 'Sees everything, changes nothing.', ['stock.view', 'stock.view_cost', 'report.view', 'data.export', 'audit.view']],
         'system_admin'      => ['System administrator', 1, 'Users, roles, settings and warehouse layout. Cannot move or approve stock.', ['admin.users', 'admin.settings', 'warehouse.setup', 'audit.view']],
+        'platform_owner'    => ['Platform owner', 9, 'Runs the online service: organisations, plans, platform settings. Sees no organisation\'s stock.', ['platform.tenants', 'platform.settings', 'platform.audit']],
     ];
 
     public const SOD = [
@@ -70,25 +54,30 @@ final class Seed
 
     public static function base(): void
     {
-        foreach (self::PERMISSIONS as $code => $desc) {
+        // 0.3.0 needs roles.tenant_id; on a fresh install the update to 0.3.0 runs first and then seeds
+        if (! Db::value("SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = 'tenant_id'", [Db::t('roles')])) {
+            return;
+        }
+        $perms = self::PLATFORM;
+        foreach (Rights::all() as $code => [, , , $desc]) {
+            $perms[$code] = $desc;
+        }
+        foreach ($perms as $code => $desc) {
             Db::exec('INSERT INTO {permissions} (code, description) VALUES (?, ?) ON DUPLICATE KEY UPDATE description = VALUES(description)', [$code, $desc]);
         }
-        foreach (self::ROLES as $code => [$name, $rank, $desc, $perms]) {
-            Db::exec('INSERT INTO {roles} (code, name, rank_level, description) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description)', [$code, $name, $rank, $desc]);
-            $rid = (int) Db::value('SELECT id FROM {roles} WHERE code = ?', [$code]);
-            foreach ($perms as $p) {
+        foreach (self::ROLES as $code => [$name, $rank, $desc, $list]) {
+            $level = $code === 'platform_owner' ? 'platform' : 'tenant';
+            Db::exec('INSERT INTO {roles} (tenant_id, code, name, level, rank_level, description) VALUES (NULL, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name = VALUES(name), description = VALUES(description), level = VALUES(level)',
+                [$code, $name, $level, $rank, $desc]);
+            $rid = (int) Db::value('SELECT id FROM {roles} WHERE tenant_id IS NULL AND code = ?', [$code]);
+            foreach ($level === 'platform' ? $list : Rights::upgrade($list) as $p) {
                 Db::exec('INSERT IGNORE INTO {role_permissions} (role_id, permission_code) VALUES (?, ?)', [$rid, $p]);
             }
         }
         foreach (self::SOD as [$a, $b, $d]) {
-            $exists = Db::value('SELECT 1 FROM {sod_rules} s JOIN {roles} ra ON ra.id = s.role_a_id JOIN {roles} rb ON rb.id = s.role_b_id WHERE ra.code = ? AND rb.code = ?', [$a, $b]);
+            $exists = Db::value('SELECT 1 FROM {sod_rules} s JOIN {roles} ra ON ra.id = s.role_a_id JOIN {roles} rb ON rb.id = s.role_b_id WHERE ra.tenant_id IS NULL AND rb.tenant_id IS NULL AND ra.code = ? AND rb.code = ?', [$a, $b]);
             if (! $exists) {
-                Db::exec('INSERT INTO {sod_rules} (role_a_id, role_b_id, description) SELECT ra.id, rb.id, ? FROM {roles} ra, {roles} rb WHERE ra.code = ? AND rb.code = ?', [$d, $a, $b]);
-            }
-        }
-        foreach (self::REASONS as $use => $list) {
-            foreach ($list as $code => $label) {
-                Db::exec('INSERT IGNORE INTO {reasons} (code, label, use_for) VALUES (?, ?, ?)', [$code, $label, $use]);
+                Db::exec('INSERT INTO {sod_rules} (role_a_id, role_b_id, description) SELECT ra.id, rb.id, ? FROM {roles} ra, {roles} rb WHERE ra.tenant_id IS NULL AND rb.tenant_id IS NULL AND ra.code = ? AND rb.code = ?', [$d, $a, $b]);
             }
         }
         if (! Db::value("SELECT value FROM {settings} WHERE name = 'cron_key'")) {
@@ -96,16 +85,81 @@ final class Seed
         }
     }
 
-    /** $roles: list of [role code, 'system'|'warehouse', warehouse id or null]. */
-    public static function user(string $username, string $name, string $password, ?string $email, array $roles, ?string $position = null): int
+    /** What a new organisation starts with: its own copies of the roles and the reason codes. */
+    public static function tenantStart(int $tenantId): void
     {
-        $uid = Db::insert('users', [
-            'username' => $username, 'name' => $name, 'email' => $email, 'position' => $position,
+        self::tenantRoles($tenantId);
+        foreach (self::REASONS as $use => $list) {
+            foreach ($list as $code => $label) {
+                Db::exec('INSERT IGNORE INTO {reasons} (tenant_id, code, label, use_for) VALUES (?, ?, ?, ?)', [$tenantId, $code, $label, $use]);
+            }
+        }
+    }
+
+    /** The organisation's own copies of the templates, made once; returns code => role id. */
+    public static function tenantRoles(int $tenantId): array
+    {
+        foreach (Db::rows("SELECT * FROM {roles} WHERE tenant_id IS NULL AND level = 'tenant' ORDER BY id") as $tpl) {
+            if (Db::value('SELECT 1 FROM {roles} WHERE tenant_id = ? AND code = ?', [$tenantId, $tpl['code']])) {
+                continue;
+            }
+            $id = Db::insert('roles', ['tenant_id' => $tenantId, 'code' => $tpl['code'], 'name' => $tpl['name'], 'description' => $tpl['description'], 'level' => 'tenant',
+                'rank_level' => $tpl['rank_level'], 'template' => $tpl['code']]);
+            Db::exec('INSERT INTO {role_permissions} (role_id, permission_code) SELECT ?, permission_code FROM {role_permissions} WHERE role_id = ?', [$id, $tpl['id']]);
+        }
+        $out = [];
+        foreach (Db::rows('SELECT id, code FROM {roles} WHERE tenant_id = ?', [$tenantId]) as $r) {
+            $out[$r['code']] = (int) $r['id'];
+        }
+        return $out;
+    }
+
+    /** A login with no memberships yet (the platform owner, or before membership is added). */
+    public static function login(string $username, string $name, string $password, ?string $email = null, ?string $position = null): int
+    {
+        return Db::insert('users', [
+            'username' => strtolower($username), 'name' => $name, 'email' => $email ?: null, 'position' => $position,
             'password_hash' => password_hash($password, PASSWORD_DEFAULT), 'active' => 1, 'created_at' => Db::now(),
         ]);
-        foreach ($roles as [$code, $scopeType, $scopeId]) {
-            Db::exec('INSERT INTO {user_roles} (user_id, role_id, scope_type, scope_id) SELECT ?, id, ?, ? FROM {roles} WHERE code = ?', [$uid, $scopeType, $scopeId, $code]);
+    }
+
+    /**
+     * Make $userId a member of $tenantId and give roles: list of [role code, warehouse id or null]. A role with no
+     * warehouse gives every warehouse (the person's warehouses, not the role's); the account owner always has all.
+     */
+    public static function member(int $tenantId, int $userId, array $roles, bool $owner = false): void
+    {
+        Db::exec('INSERT IGNORE INTO {tenant_users} (tenant_id, user_id, status, is_account_owner, created_at) VALUES (?, ?, \'active\', ?, ?)', [$tenantId, $userId, $owner ? 1 : 0, Db::now()]);
+        $ids = self::tenantRoles($tenantId);
+        foreach ($roles as [$code, $warehouseId]) {
+            if (! isset($ids[$code])) {
+                continue;
+            }
+            Db::exec("INSERT IGNORE INTO {user_roles} (tenant_id, user_id, role_id, scope_type, scope_id) VALUES (?, ?, ?, 'tenant', NULL)", [$tenantId, $userId, $ids[$code]]);
+            if ($warehouseId) {
+                Db::exec('INSERT IGNORE INTO {member_warehouses} (tenant_id, user_id, warehouse_id) VALUES (?, ?, ?)', [$tenantId, $userId, $warehouseId]);
+            } else {
+                Db::exec('UPDATE {tenant_users} SET all_warehouses = 1 WHERE tenant_id = ? AND user_id = ?', [$tenantId, $userId]);
+            }
         }
+        if ($owner) {
+            Db::exec('UPDATE {tenant_users} SET all_warehouses = 1 WHERE tenant_id = ? AND user_id = ?', [$tenantId, $userId]);
+        }
+    }
+
+    public static function platformRole(int $userId, string $code = 'platform_owner'): void
+    {
+        Db::exec("INSERT IGNORE INTO {user_roles} (tenant_id, user_id, role_id, scope_type, scope_id) SELECT NULL, ?, id, 'platform', NULL FROM {roles} WHERE tenant_id IS NULL AND code = ? AND level = 'platform'", [$userId, $code]);
+    }
+
+    /**
+     * A login that is a member of the current organisation (installer, demo, tests). $roles: list of
+     * [role code, 'system'|'warehouse', warehouse id or null], in the words of 0.2.
+     */
+    public static function user(string $username, string $name, string $password, ?string $email, array $roles, ?string $position = null, bool $owner = false): int
+    {
+        $uid = self::login($username, $name, $password, $email, $position);
+        self::member(Tenancy::require(), $uid, array_map(static fn ($r) => [$r[0], $r[1] === 'warehouse' ? $r[2] : null], $roles), $owner);
         return $uid;
     }
 }

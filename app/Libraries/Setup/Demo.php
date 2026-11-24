@@ -5,6 +5,7 @@ namespace App\Libraries\Setup;
 use App\Libraries\Core\Auth;
 use App\Libraries\Core\Db;
 use App\Libraries\Core\Settings;
+use App\Libraries\Core\Tenancy;
 use App\Libraries\Master\Items;
 use App\Libraries\Master\Parties;
 use App\Libraries\Master\Warehouses;
@@ -13,13 +14,22 @@ use App\Libraries\Master\Warehouses;
  * Demo company used by the installer (optional) and by every acceptance test:
  * a main warehouse in Lusaka with a factory floor, a depot in Kitwe, one person per duty,
  * plain, batch-with-expiry and serial items, a recipe's materials, suppliers, customers, a truck and a driver.
+ *
+ * 0.3.0: the demo company is an organisation. build() makes it (or fills the organisation given) and leaves it as
+ * the current one; second() adds Demo Foods, a small second organisation with its own people, and mia, who belongs
+ * to both, for trying the organisation chooser and the platform console.
  */
 final class Demo
 {
     public const PASSWORD = 'Demo-pass-2026';
 
-    public static function build(): array
+    public static function build(?int $tenantId = null): array
     {
+        if ($tenantId === null) {
+            $tenantId = Db::insert('tenants', ['slug' => 'demo-distributors', 'name' => 'Demo Distributors Ltd', 'status' => 'active', 'created_at' => Db::now()]);
+            Seed::tenantStart($tenantId);
+        }
+        Tenancy::set($tenantId);
         Settings::set('company_name', 'Demo Distributors Ltd');
         $admin = Seed::user('sam', 'Sam Admin', self::PASSWORD, null, [['system_admin', 'system', null]], 'IT officer');
         Auth::actAs($admin);
@@ -79,7 +89,30 @@ final class Demo
         foreach (Db::rows('SELECT b.id, b.code, w.code wh FROM {bins} b JOIN {warehouses} w ON w.id = b.warehouse_id') as $b) {
             $bins[$b['wh'] . ':' . $b['code']] = (int) $b['id'];
         }
-        return ['users' => $u, 'wh' => ['LSK' => $lsk, 'KTW' => $ktw], 'item' => $ids, 'supplier' => $sup, 'customer' => $cust, 'bin' => $bins];
+        return ['tenant' => $tenantId, 'users' => $u, 'wh' => ['LSK' => $lsk, 'KTW' => $ktw], 'item' => $ids, 'supplier' => $sup, 'customer' => $cust, 'bin' => $bins];
+    }
+
+    /**
+     * Demo Foods: a second organisation with one warehouse, its own items (one with the same code as Demo
+     * Distributors', which codes per organisation allow), its owner fay, and mia, a member of both. Returns ids.
+     */
+    public static function second(array $c): array
+    {
+        $tid = Db::insert('tenants', ['slug' => 'demo-foods', 'name' => 'Demo Foods', 'status' => 'trial', 'trial_ends_at' => gmdate('Y-m-d H:i:s', time() + 14 * 86400), 'created_at' => Db::now()]);
+        Seed::tenantStart($tid);
+        return Tenancy::run($tid, static function () use ($tid, $c) {
+            Settings::set('company_name', 'Demo Foods');
+            $fay = Seed::user('fay', 'Fay Owner', self::PASSWORD, 'fay@demo-foods.example', [['system_admin', 'system', null]], 'Owner', true);
+            Auth::actAs($fay);
+            $wh  = Warehouses::create(['code' => 'LSK', 'name' => 'Demo Foods store', 'town' => 'Lusaka', 'kind' => 'store', 'pick_policy' => 'fefo']);
+            Warehouses::addBins($wh, ['prefix' => 'S', 'aisles' => '1', 'bays' => '1-2', 'levels' => '1', 'type' => 'storage']);
+            $mia = Seed::user('mia', 'Mia Both', self::PASSWORD, null, [['storekeeper', 'warehouse', $wh]], 'Storekeeper');
+            Seed::member((int) $c['tenant'], $mia, [['auditor', null]]);
+            $cat  = Items::addCategory('Groceries');
+            $rice = Items::save(['sku' => 'RICE5', 'name' => 'Rice 5 kg bag (Demo Foods)', 'kind' => 'goods', 'uom' => 'bag', 'decimals' => 0, 'tracking' => 'none', 'category_id' => $cat, 'sell_price' => 125]);
+            Auth::actAs(null);
+            return ['tenant' => $tid, 'users' => ['fay' => $fay, 'mia' => $mia], 'wh' => $wh, 'item' => $rice];
+        });
     }
 
     /** Some history so every screen has something in it: receipts, put-away, an order shipped and delivered, a transfer on the road, a production run, a truck. */

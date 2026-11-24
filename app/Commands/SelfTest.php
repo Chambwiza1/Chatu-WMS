@@ -60,11 +60,15 @@ class SelfTest extends BaseCommand
                 Settings::flush();
                 Access::flush();
                 Auth::actAs(null);
+                \App\Libraries\Core\Tenancy::set($ctx['tenant']);
                 $t0 = microtime(true);
                 try {
                     $fn(new TestKit($ctx));
                     Auth::actAs(null);
-                    $problems = array_filter(\App\Libraries\Reports\Reconcile::run(false));
+                    $problems = [];
+                    foreach (Db::unscoped(static fn () => array_column(Db::rows('SELECT id FROM {tenants} ORDER BY id'), 'id')) as $tid) {
+                        $problems += array_filter(\App\Libraries\Core\Tenancy::run((int) $tid, static fn () => \App\Libraries\Reports\Reconcile::run(false)));
+                    }
                     if ($problems) {
                         throw new \RuntimeException('Reconciliation failed after the test: ' . json_encode($problems));
                     }
@@ -111,6 +115,12 @@ class SelfTest extends BaseCommand
         }
         \App\Libraries\Setup\Upgrade::v020($conn);
         \App\Libraries\Setup\Upgrade::v021($conn);
+        \App\Libraries\Setup\UpgradeCore::v030($conn);
+        \App\Libraries\Setup\UpgradeCore15::run($conn);
+        Db::reset($conn);
+        \App\Libraries\Core\Tenancy::set(null);
+        Settings::flush();
+        Settings::set('edition', 'saas');
         Seed::base();
         \App\Libraries\Master\Items::flush();
         return Demo::build();

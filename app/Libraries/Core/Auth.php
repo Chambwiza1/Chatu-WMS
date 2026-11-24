@@ -4,6 +4,8 @@ namespace App\Libraries\Core;
 
 /**
  * Sign-in, lockout, current user. Five wrong passwords lock the account for 10 minutes.
+ * core 1.1 (as ChatuPOS): a person signs in once (username or e-mail) and then works in one of the organisations
+ * they belong to (Tenancy, TenantFilter).
  */
 final class Auth
 {
@@ -68,7 +70,8 @@ final class Auth
     /** @return array{ok:bool, message?:string, user?:array} */
     public static function attempt(string $username, string $password): array
     {
-        $u = Db::row('SELECT * FROM {users} WHERE username = ?', [trim($username)]);
+        $login = trim($username);
+        $u = Db::row('SELECT * FROM {users} WHERE username = ? OR (email IS NOT NULL AND email = ?) ORDER BY username = ? DESC LIMIT 1', [strtolower($login), $login, strtolower($login)]);
         if (! $u || ! $u['active']) {
             password_verify($password, '$2y$10$usesomesillystringfore7hnbRJHxXVLeakoG8K30oukPsA.ztMG'); // even timing
             Audit::log('auth.login', 'user', null, null, null, 'denied', 'Unknown or inactive user: ' . mb_substr($username, 0, 60));
@@ -143,6 +146,7 @@ final class Auth
         session()->regenerate(true);
         $key = self::newKey((int) $u['id']); // core 1.1 (B7): this sign-in becomes the account's current one
         session()->set(['skey' => $key, 'uid' => (int) $u['id'], 'last_seen' => time()]);
+        session()->remove('tid');
         self::$cache = null;
         Access::flush();
         Audit::log('auth.login', 'user', $u['id'], null, null, 'success');
@@ -156,6 +160,7 @@ final class Auth
         }
         session()->destroy();
         self::$cache = null;
+        Tenancy::set(null);
     }
 
     public static function validatePassword(string $p): ?string
