@@ -27,6 +27,8 @@ class Admin extends BaseController
         'expiry_warn_days'  => ['Expiry warning (days)', 'Batches expiring within this many days are flagged.'],
         'fleet_warn_days'   => ['Fleet warning (days)', 'Insurance, fitness, road tax, licences and services due within this many days are flagged.'],
         'transfer_loss_note' => ['Note required for transfer losses (1 = yes)', 'A final transfer receipt with missing units needs a note.'],
+        'live_popups'       => ['Messages pop up (1 = yes, 0 = no)', 'New messages appear on every page until each is opened or closed.'],
+        'live_sound'        => ['Sound with them (1 = yes, 0 = no)', 'A short tone when a new message pops up. Each device can still mute it.'],
         'session_idle_minutes' => ['Sign out after idle (minutes)', ''],
         'single_session'    => ['One sign-in per account (1 = on, 0 = off)', 'On: signing in on another device or browser signs the first one out, and it is told why.'],
         'mail_from'         => ['E-mail sender address', 'Leave empty to send no e-mail.'],
@@ -209,6 +211,9 @@ class Admin extends BaseController
                     }
                     if (in_array($k, ['over_receipt_pct', 'adjust_auto_limit', 'count_auto_limit', 'expiry_warn_days', 'fleet_warn_days', 'session_idle_minutes', 'max_upload_mb', 'smtp_port'], true) && $v !== '' && (! is_numeric($v) || (float) $v < 0)) {
                         throw new BizException(self::EDITABLE[$k][0] . ': give a number, 0 or more.');
+                    }
+                    if (in_array($k, ['live_popups', 'live_sound', 'transfer_loss_note', 'single_session', 'web_cron'], true) && ! in_array($v, ['0', '1'], true)) {
+                        throw new BizException(self::EDITABLE[$k][0] . ': 1 or 0.');
                     }
                     if ($k === 'currency_code') {
                         $v = strtoupper($v);

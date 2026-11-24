@@ -4,7 +4,7 @@ By Chatu Innovations. Support: info@chatuzm.com, +260 773818370 / +260 979913497
 
 A standalone warehouse management system for distributors, manufacturers and depots. Every unit of stock is in one place (warehouse, bin, batch, serial number, status), every change is in an append-only ledger, and stock is valued at FIFO cost. Built on the Chatu Assets platform: the same sign-in, duty-based roles, hash-chained audit log, installer and look.
 
-Version 0.3.1 (the ChatuERP core, verified: organisations, one login per person, the beta12 access model, the platform console, plans and billing). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
+Version 0.3.2 (the ChatuERP core, verified: organisations, one login per person, the beta12 access model, the platform console, plans and billing). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
 
 ## What it does
 
@@ -64,6 +64,14 @@ Version 0.3.1 (the ChatuERP core, verified: organisations, one login per person,
 ## Not in this version
 
 Invoicing and payments (by design: export the dispatch report to the accounting system), a link to ChatuPOS shops (kept fully separate for now), and route optimisation. Offline use is look-up only: receiving, moving and dispatching need the network, so that two people cannot sell or move the same unit.
+
+## Changes in 0.3.2
+
+- Idle sign-out is no longer held off by the offline look-up's background refresh.
+- Message pop-ups and their sound can be switched off for the organisation (Administration, Settings).
+- The demo company's director, dora, is its account owner.
+
+Notes: `RELEASE_0_3_2.md`.
 
 ## Changes in 0.3.1
 

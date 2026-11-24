@@ -25,6 +25,7 @@ final class Demo
 
     public static function build(?int $tenantId = null): array
     {
+        $ownOrg = $tenantId === null; // a new demo organisation gets dora as its account owner; a given one already has its owner
         if ($tenantId === null) {
             $tenantId = Db::insert('tenants', ['slug' => 'demo-distributors', 'name' => 'Demo Distributors Ltd', 'status' => 'active', 'created_at' => Db::now()]);
             Seed::tenantStart($tenantId);
@@ -55,7 +56,7 @@ final class Demo
             'olive' => ['Olive Auditor', [['auditor', 'system', null]], 'External auditor'],
         ];
         foreach ($people as $un => [$name, $roles, $pos]) {
-            $u[$un] = Seed::user($un, $name, self::PASSWORD, null, $roles, $pos);
+            $u[$un] = Seed::user($un, $name, self::PASSWORD, null, $roles, $pos, $ownOrg && $un === 'dora');
         }
         // items are kept by the buyer
         Auth::actAs($u['bella']);

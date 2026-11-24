@@ -30,8 +30,8 @@ class AuthFilter implements FilterInterface
             }
             return redirect()->to(site_url('login'));
         }
-        if ('/' . ltrim($request->getUri()->getPath(), '/') !== '/live') {
-            session()->set('last_seen', time()); // core 1.1 (E2): the pop-up check every minute is not activity
+        if (! in_array('/' . ltrim($request->getUri()->getPath(), '/'), ['/live', '/offline/snapshot'], true)) {
+            session()->set('last_seen', time()); // core 1.1 (E1, E2): the pop-up check and the offline look-up refresh are not activity
         }
         \App\Filters\TenantFilter::resolve();
         \App\Libraries\Jobs::maybeRunOnVisit();
