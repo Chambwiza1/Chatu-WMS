@@ -139,3 +139,20 @@ Core 1.1 and 1.5 of `claude/CHATUERP_CORE.md`, as in ChatuPOS 2.0.0-beta27. The 
   - The update (A9): new files on an old database send every page to `/update`. There the platform owner, or the administrator in the single-company edition, updates every organisation at once. Before organisations exist, sign-ins are logged to the 0.2 chain so the update can still check it.
   - The scheduled job: platform work (e-mail, payments, the daily billing check, the integrity check), then each organisation's own work (its stock check and reminders), within 45 seconds.
 - **Messages pop up** (E2): the newest three unread stay on every page until opened or closed with ×; Close all hides them until the next sign-in; a tone that each device can mute (`/live`, `Notify::popups`).
+
+## Core 1.5.1: a forgotten password (24 November 2026)
+
+Shared requirement B12; the same `Core\PasswordReset` in every ChatuERP product.
+
+- **Pages** (`AuthController::forgot`, `doForgot`, `reset`, `doReset`; views `auth/forgot`, `auth/reset`): `forgot-password` and `reset-password/{token}`, open without signing in.
+- **Table** `password_resets` (`Setup\UpgradeReset`, migration `PasswordResets`): user, SHA-256 of the token, address, created, expires, used. A row with no user records a request that matched no account, for the limit per address. Rows go after a week.
+- **Request** (`PasswordReset::request`):
+  - finds the account by username, else by an e-mail address only one account has;
+  - refuses silently for an unknown, switched-off or address-less account, and past 3 an hour per account or 10 an hour per address;
+  - retires the account's earlier links, stores the new hash and queues the e-mail.
+- **Token:** 32 random bytes, base64url (43 characters). Good for `MINUTES` (60).
+- **Completion** (`complete`), in one transaction with the link's row locked:
+  - sets the hash, and clears `failed_logins` and `locked_until`;
+  - marks every open link of the account used, and logs `auth.reset_done`;
+  - then writes a new `session_key`, which ends open sign-ins (core 1.1).
+- **Mail:** sent after the page is answered (`sendAfterResponse`: `fastcgi_finish_request` or `litespeed_finish_request`), through `mail_from` and the `smtp_*` settings. `PasswordReset::$outbox` catches mail in tests.

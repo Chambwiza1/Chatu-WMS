@@ -12,6 +12,10 @@ $routes->get('update', 'Update::index');     // core 1.1 (A9): the in-app databa
 $routes->post('update', 'Update::run');
 $routes->get('login', 'AuthController::login');
 $routes->post('login', 'AuthController::doLogin');
+$routes->get('forgot-password', 'AuthController::forgot');      // core 1.5.1 (B12): a forgotten password
+$routes->post('forgot-password', 'AuthController::doForgot');
+$routes->get('reset-password/(:segment)', 'AuthController::reset/$1');
+$routes->post('reset-password/(:segment)', 'AuthController::doReset/$1');
 $routes->get('install', 'Install::index');
 $routes->post('install', 'Install::run');
 $routes->get('cron/run', 'Cron::run');

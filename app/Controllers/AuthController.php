@@ -99,4 +99,45 @@ class AuthController extends BaseController
             return $this->ok('Password changed.', 'account');
         }, site_url('account'));
     }
+
+    /** core 1.5.1 (B12): a forgotten password, reset by an e-mailed link. */
+    public function forgot()
+    {
+        return $this->render('auth/forgot', ['available' => \App\Libraries\Core\PasswordReset::available(), 'minutes' => \App\Libraries\Core\PasswordReset::MINUTES], 'Forgotten password');
+    }
+
+    public function doForgot()
+    {
+        $PR = \App\Libraries\Core\PasswordReset::class;
+        if ($PR::available()) {
+            $PR::request((string) $this->in('username', ''), (string) $this->request->getIPAddress(), static fn (string $token): string => site_url('reset-password/' . $token));
+            $PR::sendAfterResponse();
+        }
+        // the same answer whether or not there is such an account
+        return $this->render('auth/forgot', ['available' => $PR::available(), 'sent' => true, 'minutes' => $PR::MINUTES], 'Forgotten password');
+    }
+
+    public function reset(string $token)
+    {
+        $PR = \App\Libraries\Core\PasswordReset::class;
+        $this->response->setHeader('Cache-Control', 'no-store')->setHeader('Referrer-Policy', 'no-referrer');
+        return $this->render('auth/reset', ['u' => $PR::ready() ? $PR::find($token) : null, 'action' => site_url('reset-password/' . $token), 'minutes' => $PR::MINUTES], 'Choose a new password');
+    }
+
+    public function doReset(string $token)
+    {
+        $PR = \App\Libraries\Core\PasswordReset::class;
+        try {
+            $PR::complete($token, (string) $this->in('password', ''), (string) $this->in('password2', ''));
+        } catch (BizException $e) {
+            session()->setFlashdata('error', $e->getMessage());
+            return redirect()->to(site_url('reset-password/' . $token));
+        }
+        $PR::sendAfterResponse();
+        // whoever is signed in on this browser is signed out, without losing the message below
+        session()->remove(['uid', 'skey', 'tid', 'last_seen', 'confirmed_at']);
+        session()->regenerate(true);
+        session()->setFlashdata('ok', 'Your password is changed. Sign in with the new one.');
+        return redirect()->to(site_url('login'));
+    }
 }

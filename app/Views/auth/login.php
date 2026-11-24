@@ -11,6 +11,7 @@
       <div class="field"><label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required></div>
       <button class="btn" type="submit">Sign in</button>
     </form>
+    <p class="forgot"><a href="<?= site_url('forgot-password') ?>">Forgotten your password?</a></p>
     <p class="contact">Chatu Innovations · info@chatuzm.com · +260 773818370 · www.chatuzm.com</p>
   </div>
 </div>
