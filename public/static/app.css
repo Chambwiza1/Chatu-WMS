@@ -543,6 +543,7 @@ table.rights button[data-tick-row] { font-weight: 500; margin-left: 4px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 table.kv th { text-align: left; color: var(--ink-2); font-weight: 600; padding-right: 16px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; } /* 0.3.3: plan and module choices side by side */
 .stack { display: grid; gap: 14px; }
 .check { display: inline-flex; gap: 8px; align-items: flex-start; }
 .org-switch select { max-width: 220px; }
