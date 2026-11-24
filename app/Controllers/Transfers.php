@@ -24,8 +24,8 @@ class Transfers extends BaseController
         } elseif ($view === 'outgoing') {
             $w = "t.from_warehouse_id IN (" . implode(',', $out) . ") AND t.status IN ('draft','allocated')";
         }
-        $rows = Db::rows("SELECT t.*, fw.code from_code, tw.code to_code, (SELECT COUNT(*) FROM {transfer_lines} l WHERE l.transfer_id = t.id) n_lines FROM {transfers} t
-                           JOIN {warehouses} fw ON fw.id = t.from_warehouse_id JOIN {warehouses} tw ON tw.id = t.to_warehouse_id WHERE $w ORDER BY t.id DESC LIMIT 300");
+        $rows = Db::rows("SELECT t.*, fw.code from_code, tw.code to_code, (SELECT COUNT(*) FROM {transfer_lines} l WHERE l.tenant_id = {tid} AND l.transfer_id = t.id) n_lines FROM {transfers} t
+                           JOIN {warehouses} fw ON fw.id = t.from_warehouse_id JOIN {warehouses} tw ON tw.id = t.to_warehouse_id WHERE t.tenant_id = {tid} AND $w ORDER BY t.id DESC LIMIT 300");
         return $this->render('transfers/index', ['rows' => $rows, 'view' => $view], 'Transfers');
     }
 
@@ -35,7 +35,7 @@ class Transfers extends BaseController
         if ($r = $this->need('transfer.manage', $wh ?: null)) {
             return $r;
         }
-        return $this->render('transfers/form', ['from' => Warehouses::forUser('transfer.manage'), 'to' => Db::rows('SELECT * FROM {warehouses} WHERE active = 1 ORDER BY code'), 'wh' => $wh], 'New transfer');
+        return $this->render('transfers/form', ['from' => Warehouses::forUser('transfer.manage'), 'to' => Db::rows('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 ORDER BY code'), 'wh' => $wh], 'New transfer');
     }
 
     public function create()
@@ -56,7 +56,7 @@ class Transfers extends BaseController
     {
         $t = Db::row('SELECT t.*, fw.code from_code, fw.name from_name, tw.code to_code, tw.name to_name, u.name created_name, d.name dispatched_name, tr.number trip_no
                         FROM {transfers} t JOIN {warehouses} fw ON fw.id = t.from_warehouse_id JOIN {warehouses} tw ON tw.id = t.to_warehouse_id
-                        LEFT JOIN {users} u ON u.id = t.created_by LEFT JOIN {users} d ON d.id = t.dispatched_by LEFT JOIN {trips} tr ON tr.id = t.trip_id WHERE t.id = ?', [$id]);
+                        LEFT JOIN {users} u ON u.id = t.created_by LEFT JOIN {users} d ON d.id = t.dispatched_by LEFT JOIN {trips} tr ON tr.id = t.trip_id WHERE t.tenant_id = {tid} AND t.id = ?', [$id]);
         if (! $t) {
             return $this->notFound('Transfer');
         }
@@ -66,7 +66,7 @@ class Transfers extends BaseController
             return $this->need('transfer.manage', $from);
         }
         return $this->render('transfers/show', ['t' => $t, 'lines' => T::lines($id), 'alloc' => Alloc::active('transfer', $id), 'transit' => T::transit($id),
-            'receipts' => Db::rows('SELECT r.*, u.name user FROM {transfer_receipts} r LEFT JOIN {users} u ON u.id = r.received_by WHERE r.transfer_id = ? ORDER BY r.id', [$id]),
+            'receipts' => Db::rows('SELECT r.*, u.name user FROM {transfer_receipts} r LEFT JOIN {users} u ON u.id = r.received_by WHERE r.tenant_id = {tid} AND r.transfer_id = ? ORDER BY r.id', [$id]),
             'bins' => Warehouses::bins($to, ['receiving', 'storage', 'picking', 'production']), 'toW' => Warehouses::get($to)], $t['number']);
     }
 

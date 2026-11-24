@@ -95,7 +95,7 @@ if (! function_exists('money')) {
 
     function wh_name(int $id): string
     {
-        $w = \App\Libraries\Core\Db::row('SELECT code, name FROM {warehouses} WHERE id = ?', [$id]);
+        $w = \App\Libraries\Core\Db::row('SELECT code, name FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [$id]);
         return $w ? $w['code'] . ' ' . $w['name'] : '';
     }
 

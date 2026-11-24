@@ -103,19 +103,19 @@ final class Receipts
                         $value += $q * $l['cost'];
                     }
                     if ($l['po_line_id']) {
-                        Db::exec('UPDATE {po_lines} SET qty_received = qty_received + ? WHERE id = ?', [$l['acc'] + $l['qua'], $l['po_line_id']]);
+                        Db::exec('UPDATE {po_lines} SET qty_received = qty_received + ? WHERE tenant_id = {tid} AND id = ?', [$l['acc'] + $l['qua'], $l['po_line_id']]);
                     }
                     if ($l['cost'] > 0) {
-                        Db::exec('UPDATE {items} SET last_cost = ? WHERE id = ?', [$l['cost'], $item['id']]);
+                        Db::exec('UPDATE {items} SET last_cost = ? WHERE tenant_id = {tid} AND id = ?', [$l['cost'], $item['id']]);
                     }
                 }
-                Db::exec('UPDATE {receipts} SET value = ? WHERE id = ?', [round($value, 2), $rid]);
+                Db::exec('UPDATE {receipts} SET value = ? WHERE tenant_id = {tid} AND id = ?', [round($value, 2), $rid]);
                 if ($po) {
                     Purchasing::received((int) $po['id']);
                 }
                 $held = array_sum(array_map(static fn ($l) => $l['qua'], $lines));
                 if ($held > 0) {
-                    Notify::holders('stock.approve', $wh, 'inspection', 'Goods held for inspection at ' . $w['code'], 'Receipt ' . Db::value('SELECT number FROM {receipts} WHERE id = ?', [$rid]) . ' put units in QUARANTINE.', '/receipts/' . $rid, Auth::id());
+                    Notify::holders('stock.approve', $wh, 'inspection', 'Goods held for inspection at ' . $w['code'], 'Receipt ' . Db::value('SELECT number FROM {receipts} WHERE tenant_id = {tid} AND id = ?', [$rid]) . ' put units in QUARANTINE.', '/receipts/' . $rid, Auth::id());
                 }
                 Audit::log('receipt.post', 'receipt', $rid, null, ['warehouse' => $w['code'], 'kind' => $kind, 'lines' => count($lines), 'value' => round($value, 2)]);
                 return $rid;
@@ -203,7 +203,7 @@ final class Receipts
     public static function get(int $id): array
     {
         $r = Db::row('SELECT r.*, w.code wh_code, w.name wh_name, s.name supplier, p.number po_number, u.name posted_name FROM {receipts} r JOIN {warehouses} w ON w.id = r.warehouse_id
-                        LEFT JOIN {suppliers} s ON s.id = r.supplier_id LEFT JOIN {purchase_orders} p ON p.id = r.po_id LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.id = ?', [$id]);
+                        LEFT JOIN {suppliers} s ON s.id = r.supplier_id LEFT JOIN {purchase_orders} p ON p.id = r.po_id LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.tenant_id = {tid} AND r.id = ?', [$id]);
         if (! $r) {
             throw new BizException('Unknown receipt.');
         }
@@ -213,6 +213,6 @@ final class Receipts
     public static function lines(int $id): array
     {
         return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, b.code bin_code, lo.lot_no, lo.expiry_date FROM {receipt_lines} l JOIN {items} i ON i.id = l.item_id
-                           JOIN {bins} b ON b.id = l.bin_id LEFT JOIN {lots} lo ON lo.id = l.lot_id WHERE l.receipt_id = ? ORDER BY l.id', [$id]);
+                           JOIN {bins} b ON b.id = l.bin_id LEFT JOIN {lots} lo ON lo.id = l.lot_id WHERE l.tenant_id = {tid} AND l.receipt_id = ? ORDER BY l.id', [$id]);
     }
 }

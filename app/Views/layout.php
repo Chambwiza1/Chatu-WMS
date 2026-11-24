@@ -32,9 +32,9 @@ if ($me) {
             ['/reports', 'Reports', can('report.view') || can('stock.view')],
         ],
         'Lists' => [
-            ['/items', 'Items', can('item.manage') || can('stock.view')],
-            ['/suppliers', 'Suppliers', can('supplier.manage') || can('purchase.manage')],
-            ['/customers', 'Customers', can('customer.manage') || can('sales.manage')],
+            ['/items', 'Items', can('item.view') || can('stock.view')],
+            ['/suppliers', 'Suppliers', can('supplier.view') || can('purchase.manage')],
+            ['/customers', 'Customers', can('customer.view') || can('sales.manage')],
         ],
         'Set up' => [
             ['/warehouses', 'Warehouses and bins', can('warehouse.setup')],

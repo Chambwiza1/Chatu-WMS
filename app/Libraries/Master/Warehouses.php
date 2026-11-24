@@ -25,7 +25,7 @@ final class Warehouses
 
     public static function get(int $id): array
     {
-        $w = Db::row('SELECT * FROM {warehouses} WHERE id = ?', [$id]);
+        $w = Db::row('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [$id]);
         if (! $w) {
             throw new BizException('Unknown warehouse.');
         }
@@ -47,7 +47,7 @@ final class Warehouses
             throw new BizException('Give the warehouse a name.');
         }
         return Db::atomic(static function () use ($d, $code, $name) {
-            if (Db::value('SELECT id FROM {warehouses} WHERE code = ?', [$code])) {
+            if (Db::value('SELECT id FROM {warehouses} WHERE tenant_id = {tid} AND code = ?', [$code])) {
                 throw new BizException('Warehouse code ' . $code . ' is already used.');
             }
             $id = Db::insert('warehouses', [
@@ -60,7 +60,7 @@ final class Warehouses
             foreach (self::SYSTEM_BINS as $col => [$bcode, $type, $pickable]) {
                 $set[$col] = Db::insert('bins', ['warehouse_id' => $id, 'code' => $bcode, 'type' => $type, 'pickable' => $pickable, 'is_system' => 1, 'sort' => $sort++]);
             }
-            Db::exec('UPDATE {warehouses} SET ' . implode(', ', array_map(static fn ($c) => "$c = ?", array_keys($set))) . ' WHERE id = ?', array_merge(array_values($set), [$id]));
+            Db::exec('UPDATE {warehouses} SET ' . implode(', ', array_map(static fn ($c) => "$c = ?", array_keys($set))) . ' WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($set), [$id]));
             Audit::log('warehouse.create', 'warehouse', $id, null, ['code' => $code, 'name' => $name]);
             return $id;
         });
@@ -77,11 +77,11 @@ final class Warehouses
             'pick_policy' => ($d['pick_policy'] ?? $w['pick_policy']) === 'fifo' ? 'fifo' : 'fefo',
             'active' => isset($d['active']) ? (int) (bool) $d['active'] : (int) $w['active'],
         ];
-        if (! $row['active'] && Db::value('SELECT 1 FROM {stock} WHERE warehouse_id = ? LIMIT 1', [$id])) {
+        if (! $row['active'] && Db::value('SELECT 1 FROM {stock} WHERE tenant_id = {tid} AND warehouse_id = ? LIMIT 1', [$id])) {
             throw new BizException('The warehouse still holds stock. Move or transfer it first.');
         }
         Db::atomic(static function () use ($id, $row, $w) {
-            Db::exec('UPDATE {warehouses} SET name = ?, kind = ?, address = ?, town = ?, pick_policy = ?, active = ? WHERE id = ?', array_merge(array_values($row), [$id]));
+            Db::exec('UPDATE {warehouses} SET name = ?, kind = ?, address = ?, town = ?, pick_policy = ?, active = ? WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($row), [$id]));
             Audit::log('warehouse.update', 'warehouse', $id, array_intersect_key($w, $row), $row);
         });
     }
@@ -94,7 +94,7 @@ final class Warehouses
             throw new BizException('Zone code: letters, numbers and dash.');
         }
         return Db::atomic(static function () use ($wh, $d, $code) {
-            if (Db::value('SELECT id FROM {zones} WHERE warehouse_id = ? AND code = ?', [$wh, $code])) {
+            if (Db::value('SELECT id FROM {zones} WHERE tenant_id = {tid} AND warehouse_id = ? AND code = ?', [$wh, $code])) {
                 throw new BizException('Zone ' . $code . ' already exists here.');
             }
             $id = Db::insert('zones', ['warehouse_id' => $wh, 'code' => $code, 'name' => trim((string) ($d['name'] ?? '')) ?: $code]);
@@ -115,7 +115,7 @@ final class Warehouses
             throw new BizException('Unknown bin type.');
         }
         $zone = ($d['zone_id'] ?? '') !== '' ? (int) $d['zone_id'] : null;
-        if ($zone && ! Db::value('SELECT 1 FROM {zones} WHERE id = ? AND warehouse_id = ?', [$zone, $wh])) {
+        if ($zone && ! Db::value('SELECT 1 FROM {zones} WHERE tenant_id = {tid} AND id = ? AND warehouse_id = ?', [$zone, $wh])) {
             throw new BizException('That zone is in another warehouse.');
         }
         $codes = [];
@@ -145,9 +145,9 @@ final class Warehouses
         $pickable = in_array($type, ['storage', 'picking'], true) ? 1 : 0;
         return Db::atomic(static function () use ($wh, $codes, $zone, $type, $pickable) {
             $n = 0;
-            $sort = (int) Db::value('SELECT COALESCE(MAX(sort), 0) FROM {bins} WHERE warehouse_id = ?', [$wh]);
+            $sort = (int) Db::value('SELECT COALESCE(MAX(sort), 0) FROM {bins} WHERE tenant_id = {tid} AND warehouse_id = ?', [$wh]);
             foreach ($codes as $c) {
-                if (Db::value('SELECT 1 FROM {bins} WHERE warehouse_id = ? AND code = ?', [$wh, $c])) {
+                if (Db::value('SELECT 1 FROM {bins} WHERE tenant_id = {tid} AND warehouse_id = ? AND code = ?', [$wh, $c])) {
                     continue;
                 }
                 Db::insert('bins', ['warehouse_id' => $wh, 'zone_id' => $zone, 'code' => $c, 'type' => $type, 'pickable' => $pickable, 'sort' => ++$sort]);
@@ -170,7 +170,7 @@ final class Warehouses
 
     public static function setBinStatus(int $binId, string $status, string $note = ''): void
     {
-        $bin = Db::row('SELECT * FROM {bins} WHERE id = ?', [$binId]);
+        $bin = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$binId]);
         if (! $bin) {
             throw new BizException('Unknown bin.');
         }
@@ -181,11 +181,11 @@ final class Warehouses
         if ($bin['is_system'] && $status !== 'active') {
             throw new BizException('System bins stay active.');
         }
-        if ($status === 'inactive' && Db::value('SELECT 1 FROM {stock} WHERE bin_id = ? LIMIT 1', [$binId])) {
+        if ($status === 'inactive' && Db::value('SELECT 1 FROM {stock} WHERE tenant_id = {tid} AND bin_id = ? LIMIT 1', [$binId])) {
             throw new BizException('Bin ' . $bin['code'] . ' still holds stock. Block it instead, or move the stock out first.');
         }
         Db::atomic(static function () use ($binId, $status, $note, $bin) {
-            Db::exec('UPDATE {bins} SET status = ?, note = ? WHERE id = ?', [$status, $note !== '' ? mb_substr($note, 0, 255) : null, $binId]);
+            Db::exec('UPDATE {bins} SET status = ?, note = ? WHERE tenant_id = {tid} AND id = ?', [$status, $note !== '' ? mb_substr($note, 0, 255) : null, $binId]);
             Audit::log('bin.status', 'bin', $binId, ['status' => $bin['status']], ['status' => $status, 'note' => $note]);
         });
     }
@@ -202,12 +202,12 @@ final class Warehouses
             $w .= ' AND b.type IN (' . implode(',', array_fill(0, count($types), '?')) . ')';
             $b = array_merge($b, $types);
         }
-        return Db::rows("SELECT b.*, z.code zone_code FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE $w ORDER BY b.is_system DESC, b.sort, b.code", $b);
+        return Db::rows("SELECT b.*, z.code zone_code FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE b.tenant_id = {tid} AND $w ORDER BY b.is_system DESC, b.sort, b.code", $b);
     }
 
     public static function binByCode(int $wh, string $code): ?array
     {
-        $r = Db::row('SELECT * FROM {bins} WHERE warehouse_id = ? AND code = ?', [$wh, strtoupper(trim($code))]);
+        $r = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND warehouse_id = ? AND code = ?', [$wh, strtoupper(trim($code))]);
         return $r ?: null;
     }
 
@@ -218,11 +218,11 @@ final class Warehouses
         if (! $ids) {
             return [];
         }
-        return Db::rows('SELECT * FROM {warehouses} WHERE active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code');
+        return Db::rows('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code');
     }
 
     public static function all(): array
     {
-        return Db::rows('SELECT * FROM {warehouses} ORDER BY active DESC, code');
+        return Db::rows('SELECT * FROM {warehouses} WHERE tenant_id = {tid} ORDER BY active DESC, code');
     }
 }

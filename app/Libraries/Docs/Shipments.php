@@ -23,7 +23,7 @@ final class Shipments
 {
     public static function get(int $id, bool $lock = false): array
     {
-        $s = Db::row('SELECT * FROM {shipments} WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
+        $s = Db::row('SELECT * FROM {shipments} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $s) {
             throw new BizException('Unknown shipment.');
         }
@@ -32,7 +32,7 @@ final class Shipments
 
     public static function lines(int $id): array
     {
-        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking, i.weight_kg, ol.pack_unit, ol.pack_factor FROM {shipment_lines} l JOIN {items} i ON i.id = l.item_id LEFT JOIN {so_lines} ol ON ol.id = l.so_line_id WHERE l.shipment_id = ? ORDER BY l.id', [$id]);
+        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking, i.weight_kg, ol.pack_unit, ol.pack_factor FROM {shipment_lines} l JOIN {items} i ON i.id = l.item_id LEFT JOIN {so_lines} ol ON ol.id = l.so_line_id WHERE l.tenant_id = {tid} AND l.shipment_id = ? ORDER BY l.id', [$id]);
     }
 
     /**
@@ -49,11 +49,11 @@ final class Shipments
             if (! in_array($so['status'], ['confirmed', 'in_progress'], true)) {
                 throw new BizException('Order ' . $so['number'] . ' is ' . str_replace('_', ' ', $so['status']) . '; confirm it first.');
             }
-            $cust  = Db::row('SELECT * FROM {customers} WHERE id = ?', [$so['customer_id']]);
+            $cust  = Db::row('SELECT * FROM {customers} WHERE tenant_id = {tid} AND id = ?', [$so['customer_id']]);
             $lines = Sales::lines($soId);
             $plan  = [];
             foreach ($lines as $l) {
-                $onShip = (float) Db::value("SELECT COALESCE(SUM(sl.qty), 0) FROM {shipment_lines} sl JOIN {shipments} s ON s.id = sl.shipment_id WHERE sl.so_line_id = ? AND s.status IN ('allocated','picked','packed')", [$l['id']]);
+                $onShip = (float) Db::value("SELECT COALESCE(SUM(sl.qty), 0) FROM {shipment_lines} sl JOIN {shipments} s ON s.id = sl.shipment_id WHERE sl.tenant_id = {tid} AND sl.so_line_id = ? AND s.status IN ('allocated','picked','packed')", [$l['id']]);
                 $open   = Ledger::q((float) $l['qty'] - (float) $l['qty_shipped'] - $onShip);
                 $want   = array_key_exists((int) $l['id'], $qtys) ? Ledger::q($qtys[(int) $l['id']]) : $open;
                 if ($want <= Ledger::EPS) {
@@ -77,11 +77,11 @@ final class Shipments
                 $got   = Alloc::reserve('shipment', $id, $lid, $wh, (int) $l['item_id'], $want, ['min_expiry' => date('Y-m-d', strtotime('+' . $days . ' days'))], $partial);
                 $sum   = array_sum(array_column($got, 2));
                 if ($sum <= Ledger::EPS) {
-                    Db::exec('DELETE FROM {shipment_lines} WHERE id = ?', [$lid]);
+                    Db::exec('DELETE FROM {shipment_lines} WHERE tenant_id = {tid} AND id = ?', [$lid]);
                     continue;
                 }
                 if ($sum < $want) {
-                    Db::exec('UPDATE {shipment_lines} SET qty = ? WHERE id = ?', [Ledger::q($sum), $lid]);
+                    Db::exec('UPDATE {shipment_lines} SET qty = ? WHERE tenant_id = {tid} AND id = ?', [Ledger::q($sum), $lid]);
                 }
                 $any += $sum;
             }
@@ -118,24 +118,24 @@ final class Shipments
                     }
                     if ($q < (float) $a['qty']) {
                         $rest = Ledger::q((float) $a['qty'] - $q);
-                        Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated - ? WHERE id = ?', [$rest, $a['stock_id']]);
-                        Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE id = ?', [$rest, $a['id']]);
-                        Db::exec('UPDATE {shipment_lines} SET qty = qty - ? WHERE id = ?', [$rest, $a['doc_line_id']]);
+                        Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated - ? WHERE tenant_id = {tid} AND id = ?', [$rest, $a['stock_id']]);
+                        Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE tenant_id = {tid} AND id = ?', [$rest, $a['id']]);
+                        Db::exec('UPDATE {shipment_lines} SET qty = qty - ? WHERE tenant_id = {tid} AND id = ?', [$rest, $a['doc_line_id']]);
                         if ($q <= Ledger::EPS) {
-                            Db::exec("UPDATE {allocations} SET status = 'released', qty = ? WHERE id = ?", [$a['qty'], $a['id']]);
+                            Db::exec("UPDATE {allocations} SET status = 'released', qty = ? WHERE tenant_id = {tid} AND id = ?", [$a['qty'], $a['id']]);
                             continue;
                         }
                     }
                     Ledger::move(['stock_id' => (int) $a['stock_id'], 'qty' => $q, 'to_bin_id' => (int) $w['dispatch_bin_id'], 'allocation_id' => (int) $a['id'], 'stage' => 'picked',
                         'type' => 'pick', 'doc_type' => 'shipment', 'doc_id' => $id, 'doc_line_id' => (int) $a['doc_line_id']]);
-                    Db::exec('UPDATE {shipment_lines} SET qty_picked = qty_picked + ? WHERE id = ?', [$q, $a['doc_line_id']]);
+                    Db::exec('UPDATE {shipment_lines} SET qty_picked = qty_picked + ? WHERE tenant_id = {tid} AND id = ?', [$q, $a['doc_line_id']]);
                 }
-                Db::exec('DELETE FROM {shipment_lines} WHERE shipment_id = ? AND qty <= 0', [$id]);
-                if (! Db::value('SELECT 1 FROM {shipment_lines} WHERE shipment_id = ?', [$id])) {
+                Db::exec('DELETE FROM {shipment_lines} WHERE tenant_id = {tid} AND shipment_id = ? AND qty <= 0', [$id]);
+                if (! Db::value('SELECT 1 FROM {shipment_lines} WHERE tenant_id = {tid} AND shipment_id = ?', [$id])) {
                     throw new BizException('Nothing was picked. Cancel the shipment instead.');
                 }
-                $weight = (float) Db::value('SELECT COALESCE(SUM(sl.qty_picked * COALESCE(i.weight_kg, 0)), 0) FROM {shipment_lines} sl JOIN {items} i ON i.id = sl.item_id WHERE sl.shipment_id = ?', [$id]);
-                Db::exec("UPDATE {shipments} SET status = 'picked', picked_by = ?, picked_at = ?, weight_kg = ? WHERE id = ?", [Auth::id(), Db::now(), $weight ?: null, $id]);
+                $weight = (float) Db::value('SELECT COALESCE(SUM(sl.qty_picked * COALESCE(i.weight_kg, 0)), 0) FROM {shipment_lines} sl JOIN {items} i ON i.id = sl.item_id WHERE sl.tenant_id = {tid} AND sl.shipment_id = ?', [$id]);
+                Db::exec("UPDATE {shipments} SET status = 'picked', picked_by = ?, picked_at = ?, weight_kg = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), $weight ?: null, $id]);
                 Sales::refresh((int) $s['so_id']);
                 Audit::log('shipment.pick', 'shipment', $id);
                 return $id;
@@ -154,7 +154,7 @@ final class Shipments
             if ($packages < 1) {
                 throw new BizException('Give the number of packages (cartons, pallets).');
             }
-            Db::exec("UPDATE {shipments} SET status = 'packed', packages = ?, weight_kg = COALESCE(?, weight_kg), packed_at = ? WHERE id = ?", [$packages, $weight, Db::now(), $id]);
+            Db::exec("UPDATE {shipments} SET status = 'packed', packages = ?, weight_kg = COALESCE(?, weight_kg), packed_at = ? WHERE tenant_id = {tid} AND id = ?", [$packages, $weight, Db::now(), $id]);
             Audit::log('shipment.pack', 'shipment', $id, null, ['packages' => $packages, 'weight' => $weight]);
         });
     }
@@ -181,9 +181,9 @@ final class Shipments
                     $total += $r['value'];
                 }
                 foreach ($lines as $l) {
-                    Db::exec('UPDATE {so_lines} SET qty_shipped = qty_shipped + ? WHERE id = ?', [$l['qty_picked'], $l['so_line_id']]);
+                    Db::exec('UPDATE {so_lines} SET qty_shipped = qty_shipped + ? WHERE tenant_id = {tid} AND id = ?', [$l['qty_picked'], $l['so_line_id']]);
                 }
-                Db::exec("UPDATE {shipments} SET status = 'dispatched', dispatched_by = ?, dispatched_at = ?, value = ? WHERE id = ?", [Auth::id(), Db::now(), round($total, 2), $id]);
+                Db::exec("UPDATE {shipments} SET status = 'dispatched', dispatched_by = ?, dispatched_at = ?, value = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), round($total, 2), $id]);
                 Sales::refresh((int) $s['so_id']);
                 Audit::log('shipment.dispatch', 'shipment', $id, null, ['value' => round($total, 2)]);
                 return $id;
@@ -204,10 +204,10 @@ final class Shipments
                 throw new BizException('Give the name of the person who received the goods.');
             }
             foreach (self::lines($id) as $l) {
-                Db::exec('UPDATE {so_lines} SET qty_delivered = qty_delivered + ? WHERE id = ?', [$l['qty_picked'], $l['so_line_id']]);
+                Db::exec('UPDATE {so_lines} SET qty_delivered = qty_delivered + ? WHERE tenant_id = {tid} AND id = ?', [$l['qty_picked'], $l['so_line_id']]);
             }
-            Db::exec("UPDATE {shipments} SET status = 'delivered', delivered_at = ?, pod_name = ?, pod_note = ? WHERE id = ?", [Db::now(), mb_substr(trim($receivedBy), 0, 100), trim($note) ?: null, $id]);
-            Db::exec("UPDATE {trip_stops} SET status = 'done', done_at = ? WHERE kind = 'shipment' AND doc_id = ? AND status = 'pending'", [Db::now(), $id]);
+            Db::exec("UPDATE {shipments} SET status = 'delivered', delivered_at = ?, pod_name = ?, pod_note = ? WHERE tenant_id = {tid} AND id = ?", [Db::now(), mb_substr(trim($receivedBy), 0, 100), trim($note) ?: null, $id]);
+            Db::exec("UPDATE {trip_stops} SET status = 'done', done_at = ? WHERE tenant_id = {tid} AND kind = 'shipment' AND doc_id = ? AND status = 'pending'", [Db::now(), $id]);
             Sales::refresh((int) $s['so_id']);
             Audit::log('shipment.deliver', 'shipment', $id, null, ['received_by' => $receivedBy]);
         });
@@ -226,16 +226,16 @@ final class Shipments
                 if ($s['status'] !== 'dispatched') {
                     throw new BizException('Only a dispatched shipment can fail.');
                 }
-                if (! Db::value("SELECT 1 FROM {reasons} WHERE use_for = 'failed_delivery' AND code = ? AND active = 1", [$reason])) {
+                if (! Db::value("SELECT 1 FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'failed_delivery' AND code = ? AND active = 1", [$reason])) {
                     throw new BizException('Choose why the delivery failed.');
                 }
-                $units = Db::rows('SELECT * FROM {shipment_units} WHERE shipment_id = ? AND qty > qty_returned FOR UPDATE', [$id]);
+                $units = Db::rows('SELECT * FROM {shipment_units} WHERE tenant_id = {tid} AND shipment_id = ? AND qty > qty_returned FOR UPDATE', [$id]);
                 $rid   = self::bringBack($s, $units, array_map(static fn ($u) => (float) $u['qty'] - (float) $u['qty_returned'], $units), 'failed_delivery', $reason, $note, $status, $binId);
                 foreach (self::lines($id) as $l) {
-                    Db::exec('UPDATE {so_lines} SET qty_shipped = qty_shipped - ? WHERE id = ?', [$l['qty_picked'], $l['so_line_id']]);
+                    Db::exec('UPDATE {so_lines} SET qty_shipped = qty_shipped - ? WHERE tenant_id = {tid} AND id = ?', [$l['qty_picked'], $l['so_line_id']]);
                 }
-                Db::exec("UPDATE {shipments} SET status = 'failed', failed_reason = ? WHERE id = ?", [mb_substr($reason . ($note !== '' ? ': ' . $note : ''), 0, 255), $id]);
-                Db::exec("UPDATE {trip_stops} SET status = 'failed', done_at = ? WHERE kind = 'shipment' AND doc_id = ? AND status = 'pending'", [Db::now(), $id]);
+                Db::exec("UPDATE {shipments} SET status = 'failed', failed_reason = ? WHERE tenant_id = {tid} AND id = ?", [mb_substr($reason . ($note !== '' ? ': ' . $note : ''), 0, 255), $id]);
+                Db::exec("UPDATE {trip_stops} SET status = 'failed', done_at = ? WHERE tenant_id = {tid} AND kind = 'shipment' AND doc_id = ? AND status = 'pending'", [Db::now(), $id]);
                 Sales::refresh((int) $s['so_id']);
                 return $rid;
             });
@@ -252,7 +252,7 @@ final class Shipments
                 if ($s['status'] !== 'delivered') {
                     throw new BizException('Only delivered goods can be returned by the customer.');
                 }
-                if (! Db::value("SELECT 1 FROM {reasons} WHERE use_for = 'customer_return' AND code = ? AND active = 1", [$reason])) {
+                if (! Db::value("SELECT 1 FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'customer_return' AND code = ? AND active = 1", [$reason])) {
                     throw new BizException('Choose a reason for the return.');
                 }
                 $units = [];
@@ -262,7 +262,7 @@ final class Shipments
                     if ($qty <= 0) {
                         continue;
                     }
-                    $u = Db::row('SELECT * FROM {shipment_units} WHERE id = ? AND shipment_id = ? FOR UPDATE', [(int) $uid, $id]);
+                    $u = Db::row('SELECT * FROM {shipment_units} WHERE tenant_id = {tid} AND id = ? AND shipment_id = ? FOR UPDATE', [(int) $uid, $id]);
                     if (! $u) {
                         throw new BizException('That unit was not on this shipment.');
                     }
@@ -277,9 +277,9 @@ final class Shipments
                 }
                 $rid = self::bringBack($s, $units, $q, 'customer_return', $reason, $note, $status, null);
                 foreach ($units as $i => $u) {
-                    $soLine = (int) Db::value('SELECT so_line_id FROM {shipment_lines} WHERE id = ?', [$u['shipment_line_id']]);
-                    Db::exec('UPDATE {so_lines} SET qty_returned = qty_returned + ? WHERE id = ?', [$q[$i], $soLine]);
-                    Db::exec('UPDATE {shipment_lines} SET qty_returned = qty_returned + ? WHERE id = ?', [$q[$i], $u['shipment_line_id']]);
+                    $soLine = (int) Db::value('SELECT so_line_id FROM {shipment_lines} WHERE tenant_id = {tid} AND id = ?', [$u['shipment_line_id']]);
+                    Db::exec('UPDATE {so_lines} SET qty_returned = qty_returned + ? WHERE tenant_id = {tid} AND id = ?', [$q[$i], $soLine]);
+                    Db::exec('UPDATE {shipment_lines} SET qty_returned = qty_returned + ? WHERE tenant_id = {tid} AND id = ?', [$q[$i], $u['shipment_line_id']]);
                 }
                 return $rid;
             });
@@ -304,10 +304,10 @@ final class Shipments
             $unit = (float) $u['qty'] > 0 ? (float) $u['value'] / (float) $u['qty'] : 0.0;
             Ledger::add(['warehouse_id' => $wh, 'bin_id' => $bin, 'item_id' => (int) $u['item_id'], 'lot_id' => $u['lot_id'], 'serial_id' => $u['serial_id'], 'status' => $status, 'qty' => $q,
                 'type' => $kind, 'doc_type' => 'customer_return', 'doc_id' => $rid, 'doc_line_id' => (int) $u['id'], 'unit_cost' => round($unit, 4), 'reason_code' => $reason, 'allow_blocked' => false]);
-            Db::exec('UPDATE {shipment_units} SET qty_returned = qty_returned + ? WHERE id = ?', [$q, $u['id']]);
+            Db::exec('UPDATE {shipment_units} SET qty_returned = qty_returned + ? WHERE tenant_id = {tid} AND id = ?', [$q, $u['id']]);
             $value += $q * $unit;
         }
-        Db::exec('UPDATE {customer_returns} SET value = ? WHERE id = ?', [round($value, 2), $rid]);
+        Db::exec('UPDATE {customer_returns} SET value = ? WHERE tenant_id = {tid} AND id = ?', [round($value, 2), $rid]);
         Audit::log($kind . '.post', 'customer_return', $rid, null, ['shipment' => $s['number'], 'reason' => $reason, 'value' => round($value, 2), 'status' => $status]);
         return $rid;
     }
@@ -329,8 +329,8 @@ final class Shipments
             }
             Ledger::lock(array_map(static fn ($l) => [$wh, (int) $l['item_id']], self::lines($id)));
             Alloc::release('shipment', $id);
-            Db::exec("UPDATE {shipments} SET status = 'cancelled', failed_reason = ? WHERE id = ?", [mb_substr($why, 0, 255), $id]);
-            Db::exec("DELETE FROM {trip_stops} WHERE kind = 'shipment' AND doc_id = ? AND status = 'pending'", [$id]);
+            Db::exec("UPDATE {shipments} SET status = 'cancelled', failed_reason = ? WHERE tenant_id = {tid} AND id = ?", [mb_substr($why, 0, 255), $id]);
+            Db::exec("DELETE FROM {trip_stops} WHERE tenant_id = {tid} AND kind = 'shipment' AND doc_id = ? AND status = 'pending'", [$id]);
             if (! $fromOrder) {
                 Sales::refresh((int) $s['so_id']);
             }
@@ -346,6 +346,6 @@ final class Shipments
     public static function units(int $id): array
     {
         return Db::rows('SELECT u.*, i.sku, i.name, i.uom, i.decimals, l.lot_no, l.expiry_date, se.serial_no FROM {shipment_units} u JOIN {items} i ON i.id = u.item_id
-                           LEFT JOIN {lots} l ON l.id = u.lot_id LEFT JOIN {serials} se ON se.id = u.serial_id WHERE u.shipment_id = ? ORDER BY u.id', [$id]);
+                           LEFT JOIN {lots} l ON l.id = u.lot_id LEFT JOIN {serials} se ON se.id = u.serial_id WHERE u.tenant_id = {tid} AND u.shipment_id = ? ORDER BY u.id', [$id]);
     }
 }

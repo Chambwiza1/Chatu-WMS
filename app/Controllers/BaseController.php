@@ -54,7 +54,7 @@ abstract class BaseController extends Controller
         $mine = [];
         if ($uid) {
             $ids  = array_values(array_unique(array_merge(...array_map(static fn ($p) => Access::warehouses($p), ['stock.view', 'receive.post', 'dispatch.manage', 'warehouse.setup']))));
-            $mine = $ids ? Db::rows('SELECT id, code, name FROM {warehouses} WHERE active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code') : [];
+            $mine = $ids ? Db::rows('SELECT id, code, name FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 AND id IN (' . implode(',', $ids) . ') ORDER BY code') : [];
         }
         $data += [
             'title'      => $title,

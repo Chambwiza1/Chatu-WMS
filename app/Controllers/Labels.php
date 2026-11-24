@@ -25,7 +25,7 @@ class Labels extends BaseController
 
     public function items()
     {
-        if ($r = $this->needAny(['item.manage', 'stock.view'])) {
+        if ($r = $this->needAny(['item.view', 'stock.view'])) {
             return $r;
         }
         $ids = array_filter(array_map('intval', (array) $this->request->getGet('ids')));
@@ -34,7 +34,7 @@ class Labels extends BaseController
         }
         $n = $this->copies();
         $out = [];
-        foreach (Db::rows('SELECT * FROM {items} WHERE id IN (' . implode(',', $ids) . ') ORDER BY sku') as $i) {
+        foreach (Db::rows('SELECT * FROM {items} WHERE tenant_id = {tid} AND id IN (' . implode(',', $ids) . ') ORDER BY sku') as $i) {
             $price = $this->request->getGet('price') && (float) $i['sell_price'] > 0 ? money($i['sell_price']) : null;
             for ($k = 0; $k < $n; $k++) {
                 $out[] = ['code' => $i['barcode'] ?: $i['sku'], 'top' => $i['name'], 'line' => $i['sku'] . ' · ' . $i['uom'], 'extra' => $price];
@@ -55,7 +55,7 @@ class Labels extends BaseController
         if ($r = $this->needAny(['warehouse.setup', 'inventory.move', 'stock.view'], $wh)) {
             return $r;
         }
-        $w = Db::row('SELECT * FROM {warehouses} WHERE id = ?', [$wh]);
+        $w = Db::row('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [$wh]);
         $where = 'b.warehouse_id = ?';
         $b = [$wh];
         if ($z = (int) $this->request->getGet('zone_id')) {
@@ -66,7 +66,7 @@ class Labels extends BaseController
             $where .= ' AND b.is_system = 0';
         }
         $out = [];
-        foreach (Db::rows("SELECT b.*, z.name zone FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE $where AND b.status <> 'inactive' ORDER BY b.sort, b.code", $b) as $bin) {
+        foreach (Db::rows("SELECT b.*, z.name zone FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE b.tenant_id = {tid} AND $where AND b.status <> 'inactive' ORDER BY b.sort, b.code", $b) as $bin) {
             $out[] = ['code' => $bin['code'], 'top' => $w['code'] . ' ' . ($bin['zone'] ?: \App\Libraries\Master\Warehouses::BIN_TYPES[$bin['type']]), 'line' => $bin['code'], 'extra' => null, 'big' => true];
         }
         return $this->sheet($out, 'Bin labels ' . $w['code']);
@@ -77,7 +77,7 @@ class Labels extends BaseController
         if ($r = $this->needAny(['stock.view', 'receive.post'])) {
             return $r;
         }
-        $l = Db::row('SELECT l.*, i.name, i.sku FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.id = ?', [$id]);
+        $l = Db::row('SELECT l.*, i.name, i.sku FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.id = ?', [$id]);
         if (! $l) {
             return $this->notFound('Batch');
         }
@@ -92,7 +92,7 @@ class Labels extends BaseController
     /** Labels for what a goods receipt or production run brought in: one per serial, or the chosen number per batch. */
     public function receipt(int $id)
     {
-        $r = Db::row('SELECT * FROM {receipts} WHERE id = ?', [$id]);
+        $r = Db::row('SELECT * FROM {receipts} WHERE tenant_id = {tid} AND id = ?', [$id]);
         if (! $r) {
             return $this->notFound('Receipt');
         }
@@ -101,7 +101,7 @@ class Labels extends BaseController
         }
         $n = $this->copies();
         $out = [];
-        foreach (Db::rows('SELECT rl.*, i.name, i.sku, i.barcode, i.uom, l.lot_no, l.expiry_date, l.mfg_date FROM {receipt_lines} rl JOIN {items} i ON i.id = rl.item_id LEFT JOIN {lots} l ON l.id = rl.lot_id WHERE rl.receipt_id = ?', [$id]) as $line) {
+        foreach (Db::rows('SELECT rl.*, i.name, i.sku, i.barcode, i.uom, l.lot_no, l.expiry_date, l.mfg_date FROM {receipt_lines} rl JOIN {items} i ON i.id = rl.item_id LEFT JOIN {lots} l ON l.id = rl.lot_id WHERE rl.tenant_id = {tid} AND rl.receipt_id = ?', [$id]) as $line) {
             if ($line['serials']) {
                 foreach (array_filter(explode("\n", $line['serials'])) as $sn) {
                     $out[] = ['code' => $sn, 'top' => $line['name'], 'line' => $line['sku'] . ' · serial', 'extra' => $line['lot_no'] ? 'Batch ' . $line['lot_no'] : null];
@@ -121,7 +121,7 @@ class Labels extends BaseController
 
     public function run(int $id)
     {
-        $p = Db::row('SELECT p.*, l.lot_no, l.expiry_date, l.mfg_date, i.name, i.sku FROM {production_runs} p JOIN {items} i ON i.id = p.output_item_id LEFT JOIN {lots} l ON l.id = p.lot_id WHERE p.id = ?', [$id]);
+        $p = Db::row('SELECT p.*, l.lot_no, l.expiry_date, l.mfg_date, i.name, i.sku FROM {production_runs} p JOIN {items} i ON i.id = p.output_item_id LEFT JOIN {lots} l ON l.id = p.lot_id WHERE p.tenant_id = {tid} AND p.id = ?', [$id]);
         if (! $p || ! $p['lot_no']) {
             return $this->notFound('Batch');
         }

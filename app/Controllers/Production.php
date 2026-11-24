@@ -18,9 +18,9 @@ class Production extends BaseController
         }
         [$w, $b] = Access::whereWarehouse('production.manage', 'p.warehouse_id');
         return $this->render('production/index', [
-            'recipes' => Db::rows('SELECT r.*, i.sku, i.name item_name, i.uom, (SELECT COUNT(*) FROM {recipe_lines} l WHERE l.recipe_id = r.id) materials FROM {recipes} r JOIN {items} i ON i.id = r.output_item_id ORDER BY r.active DESC, r.code'),
+            'recipes' => Db::rows('SELECT r.*, i.sku, i.name item_name, i.uom, (SELECT COUNT(*) FROM {recipe_lines} l WHERE l.tenant_id = {tid} AND l.recipe_id = r.id) materials FROM {recipes} r JOIN {items} i ON i.id = r.output_item_id WHERE r.tenant_id = {tid} ORDER BY r.active DESC, r.code'),
             'runs'    => Db::rows("SELECT p.*, r.code recipe, i.sku, i.uom, l.lot_no, w.code wh FROM {production_runs} p JOIN {recipes} r ON r.id = p.recipe_id JOIN {items} i ON i.id = p.output_item_id
-                                    JOIN {warehouses} w ON w.id = p.warehouse_id LEFT JOIN {lots} l ON l.id = p.lot_id WHERE $w ORDER BY p.id DESC LIMIT 50", $b),
+                                    JOIN {warehouses} w ON w.id = p.warehouse_id LEFT JOIN {lots} l ON l.id = p.lot_id WHERE p.tenant_id = {tid} AND $w ORDER BY p.id DESC LIMIT 50", $b),
         ], 'Production');
     }
 
@@ -58,7 +58,7 @@ class Production extends BaseController
                 $avail[$l['item_id']] = Alloc::free($wh, (int) $l['item_id'], ['bin_types' => ['production', 'storage', 'picking']]);
             }
         }
-        return $this->render('production/run_form', ['rec' => $rec, 'recipes' => Db::rows('SELECT id, code, name FROM {recipes} WHERE active = 1 ORDER BY code'), 'wh' => $wh, 'w' => Warehouses::get($wh),
+        return $this->render('production/run_form', ['rec' => $rec, 'recipes' => Db::rows('SELECT id, code, name FROM {recipes} WHERE tenant_id = {tid} AND active = 1 ORDER BY code'), 'wh' => $wh, 'w' => Warehouses::get($wh),
             'batches' => $batches, 'avail' => $avail, 'warehouses' => Warehouses::forUser('production.manage'), 'bins' => Warehouses::bins($wh, ['storage', 'picking', 'production'])], 'Production run');
     }
 

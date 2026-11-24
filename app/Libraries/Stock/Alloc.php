@@ -46,10 +46,10 @@ final class Alloc
         $order = $first . ($policy === 'fefo'
             ? 'CASE WHEN l.expiry_date IS NULL THEN 1 ELSE 0 END, l.expiry_date, l.created_at, b.sort, s.id'
             : 'l.created_at, l.id, b.sort, s.id');
-        $ids = Db::rows('SELECT s.id FROM {stock} s JOIN {bins} b ON b.id = s.bin_id LEFT JOIN {lots} l ON l.id = s.lot_id WHERE ' . implode(' AND ', $w) . " ORDER BY $order", $b);
+        $ids = Db::rows('SELECT s.id FROM {stock} s JOIN {bins} b ON b.id = s.bin_id LEFT JOIN {lots} l ON l.id = s.lot_id WHERE s.tenant_id = {tid} AND ' . implode(' AND ', $w) . " ORDER BY $order", $b);
         $out = [];
         foreach ($ids as $r) { // lock in id order would be stricter; the item lock already serialises writers
-            $row = Db::row('SELECT s.*, (s.qty - s.qty_allocated) free FROM {stock} s WHERE s.id = ? FOR UPDATE', [$r['id']]);
+            $row = Db::row('SELECT s.*, (s.qty - s.qty_allocated) free FROM {stock} s WHERE s.tenant_id = {tid} AND s.id = ? FOR UPDATE', [$r['id']]);
             if ($row && (float) $row['free'] > Ledger::EPS) {
                 $out[] = $row;
             }
@@ -82,7 +82,7 @@ final class Alloc
             if ($r['serial_id'] && $take < 1) {
                 continue;
             }
-            Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated + ? WHERE id = ?', [$take, $r['id']]);
+            Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated + ? WHERE tenant_id = {tid} AND id = ?', [$take, $r['id']]);
             $aid   = Db::insert('allocations', ['stock_id' => $r['id'], 'doc_type' => $docType, 'doc_id' => $docId, 'doc_line_id' => $lineId, 'qty' => $take, 'stage' => 'reserved', 'status' => 'active', 'created_at' => Db::now()]);
             $out[] = [$aid, (int) $r['id'], $take];
             $need  = Ledger::q($need - $take);
@@ -104,9 +104,9 @@ final class Alloc
             $b[] = $lineId;
         }
         $sum = 0.0;
-        foreach (Db::rows("SELECT * FROM {allocations} WHERE $w ORDER BY stock_id FOR UPDATE", $b) as $a) {
-            Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated - ? WHERE id = ?', [$a['qty'], $a['stock_id']]);
-            Db::exec("UPDATE {allocations} SET status = 'released' WHERE id = ?", [$a['id']]);
+        foreach (Db::rows("SELECT * FROM {allocations} WHERE tenant_id = {tid} AND $w ORDER BY stock_id FOR UPDATE", $b) as $a) {
+            Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated - ? WHERE tenant_id = {tid} AND id = ?', [$a['qty'], $a['stock_id']]);
+            Db::exec("UPDATE {allocations} SET status = 'released' WHERE tenant_id = {tid} AND id = ?", [$a['id']]);
             $sum += (float) $a['qty'];
         }
         // a row whose last units were only reserved (qty 0) cannot exist: rows hold qty >= allocated
@@ -128,6 +128,6 @@ final class Alloc
         return Db::rows("SELECT a.*, s.bin_id, s.lot_id, s.serial_id, s.item_id, s.warehouse_id, s.status stock_status, b.code bin_code, l.lot_no, l.expiry_date, se.serial_no
                            FROM {allocations} a JOIN {stock} s ON s.id = a.stock_id JOIN {bins} b ON b.id = s.bin_id
                            LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id
-                          WHERE $w ORDER BY b.sort, b.code, a.id", $b);
+                          WHERE a.tenant_id = {tid} AND $w ORDER BY b.sort, b.code, a.id", $b);
     }
 }

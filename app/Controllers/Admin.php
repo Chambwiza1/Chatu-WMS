@@ -95,7 +95,7 @@ class Admin extends BaseController
             return $this->notFound('User');
         }
         return $this->render('admin/user', ['u' => $u, 'roles' => Access::roles($id), 'allRoles' => Db::rows('SELECT * FROM {roles} ORDER BY rank_level DESC, name'),
-            'warehouses' => Db::rows('SELECT * FROM {warehouses} WHERE active = 1 ORDER BY code'), 'conflicts' => Access::sodConflicts($id)], $u['name']);
+            'warehouses' => Db::rows('SELECT * FROM {warehouses} WHERE tenant_id = {tid} AND active = 1 ORDER BY code'), 'conflicts' => Access::sodConflicts($id)], $u['name']);
     }
 
     public function saveUser(int $id)
@@ -126,7 +126,7 @@ class Admin extends BaseController
 
     public function revoke(int $userRoleId)
     {
-        $uid = (int) Db::value('SELECT user_id FROM {user_roles} WHERE id = ?', [$userRoleId]);
+        $uid = (int) Db::value('SELECT user_id FROM {user_roles} WHERE tenant_id = {tid} AND id = ?', [$userRoleId]);
         return $this->act(function () use ($userRoleId, $uid) {
             Users::revoke($userRoleId);
             return $this->ok('Role removed.', 'admin/users/' . $uid);
@@ -152,7 +152,7 @@ class Admin extends BaseController
         if ($r = $this->need('admin.settings')) {
             return $r;
         }
-        return $this->render('admin/settings', ['fields' => self::EDITABLE, 'reasons' => Db::rows('SELECT * FROM {reasons} ORDER BY use_for, label')], 'Settings');
+        return $this->render('admin/settings', ['fields' => self::EDITABLE, 'reasons' => Db::rows('SELECT * FROM {reasons} WHERE tenant_id = {tid} ORDER BY use_for, label')], 'Settings');
     }
 
     public function saveSettings()
@@ -204,9 +204,9 @@ class Admin extends BaseController
             }
             $label = trim((string) $this->in('label'));
             Db::atomic(static function () use ($use, $code, $label) {
-                $exists = Db::row('SELECT * FROM {reasons} WHERE use_for = ? AND code = ?', [$use, $code]);
+                $exists = Db::row('SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = ? AND code = ?', [$use, $code]);
                 if ($exists) {
-                    Db::exec('UPDATE {reasons} SET label = ?, active = ? WHERE id = ?', [$label ?: $exists['label'], $label === '-' ? 0 : 1, $exists['id']]);
+                    Db::exec('UPDATE {reasons} SET label = ?, active = ? WHERE tenant_id = {tid} AND id = ?', [$label ?: $exists['label'], $label === '-' ? 0 : 1, $exists['id']]);
                 } else {
                     if ($label === '') {
                         throw new BizException('Give the reason a description.');

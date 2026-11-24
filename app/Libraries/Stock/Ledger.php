@@ -41,14 +41,14 @@ final class Ledger
             return [$wa, $ia] <=> [$wb, $ib];
         });
         foreach ($keys as [$w, $i]) {
-            Db::exec('INSERT IGNORE INTO {stock_locks} (warehouse_id, item_id) VALUES (?, ?)', [$w, $i]);
-            Db::row('SELECT warehouse_id FROM {stock_locks} WHERE warehouse_id = ? AND item_id = ? FOR UPDATE', [$w, $i]);
+            Db::exec('INSERT IGNORE INTO {stock_locks} (tenant_id, warehouse_id, item_id) VALUES ({tid}, ?, ?)', [$w, $i]);
+            Db::row('SELECT warehouse_id FROM {stock_locks} WHERE tenant_id = {tid} AND warehouse_id = ? AND item_id = ? FOR UPDATE', [$w, $i]);
         }
     }
 
     public static function row(int $stockId, bool $forUpdate = true): array
     {
-        $r = Db::row('SELECT * FROM {stock} WHERE id = ?' . ($forUpdate ? ' FOR UPDATE' : ''), [$stockId]);
+        $r = Db::row('SELECT * FROM {stock} WHERE tenant_id = {tid} AND id = ?' . ($forUpdate ? ' FOR UPDATE' : ''), [$stockId]);
         if (! $r) {
             throw new BizException('That stock is no longer there (it was moved or used). Refresh and try again.');
         }
@@ -57,7 +57,7 @@ final class Ledger
 
     public static function bin(int $binId): array
     {
-        $b = Db::row('SELECT * FROM {bins} WHERE id = ?', [$binId]);
+        $b = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$binId]);
         if (! $b) {
             throw new BizException('Unknown bin.');
         }
@@ -97,12 +97,12 @@ final class Ledger
         }
         $now = Db::now();
         Db::exec(
-            'INSERT INTO {stock} (warehouse_id, bin_id, item_id, lot_id, serial_id, status, qty, qty_allocated, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)
+            'INSERT INTO {stock} (tenant_id, warehouse_id, bin_id, item_id, lot_id, serial_id, status, qty, qty_allocated, updated_at) VALUES ({tid}, ?, ?, ?, ?, ?, ?, ?, 0, ?)
              ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty), updated_at = VALUES(updated_at)',
             [$wh, $bin['id'], $item['id'], $lotId, $serialId, $status, $qty, $now]
         );
         if ($serialId) {
-            Db::exec("UPDATE {serials} SET status = 'in_stock', warehouse_id = ?, customer_id = NULL, last_doc = ? WHERE id = ?", [$wh, self::docRef($p), $serialId]);
+            Db::exec("UPDATE {serials} SET status = 'in_stock', warehouse_id = ?, customer_id = NULL, last_doc = ? WHERE tenant_id = {tid} AND id = ?", [$wh, self::docRef($p), $serialId]);
         }
         // cost layers
         $layers = [];
@@ -159,12 +159,12 @@ final class Ledger
         }
         self::changeRow($row, -$qty, -$own);
         if ($row['serial_id']) {
-            Db::exec('UPDATE {serials} SET status = ?, warehouse_id = NULL, customer_id = ?, last_doc = ? WHERE id = ?', [$p['serial_status'] ?? 'dispatched', $p['customer_id'] ?? null, self::docRef($p), $row['serial_id']]);
+            Db::exec('UPDATE {serials} SET status = ?, warehouse_id = NULL, customer_id = ?, last_doc = ? WHERE tenant_id = {tid} AND id = ?', [$p['serial_status'] ?? 'dispatched', $p['customer_id'] ?? null, self::docRef($p), $row['serial_id']]);
         }
         $mid    = self::movement($p + ['warehouse_id' => $row['warehouse_id'], 'item_id' => $row['item_id']], (int) $row['bin_id'], null, $row['status'], null, $row['lot_id'] ? (int) $row['lot_id'] : null, $row['serial_id'] ? (int) $row['serial_id'] : null, null);
         $layers = Valuation::consume((int) $row['warehouse_id'], (int) $row['item_id'], $qty, $p['doc_type'] ?? $p['type'], $p['doc_id'] ?? null, $mid, $p['prefer_layer'] ?? null);
         $value  = Valuation::valueOf($layers);
-        Db::exec('UPDATE {movements} SET value = ? WHERE id = ?', [$value, $mid]);
+        Db::exec('UPDATE {movements} SET value = ? WHERE tenant_id = {tid} AND id = ?', [$value, $mid]);
         return ['movement_id' => $mid, 'value' => $value, 'layers' => $layers];
     }
 
@@ -198,7 +198,7 @@ final class Ledger
         $carry = 0.0;
         $allocId = ! empty($p['allocation_id']) ? (int) $p['allocation_id'] : null;
         if ($allocId) {
-            $a = Db::row("SELECT * FROM {allocations} WHERE id = ? AND status = 'active' FOR UPDATE", [$allocId]);
+            $a = Db::row("SELECT * FROM {allocations} WHERE tenant_id = {tid} AND id = ? AND status = 'active' FOR UPDATE", [$allocId]);
             if (! $a || (int) $a['stock_id'] !== (int) $row['id'] || $qty - (float) $a['qty'] > self::EPS) {
                 throw new BizException('That reservation does not cover this stock.');
             }
@@ -211,18 +211,18 @@ final class Ledger
         }
         self::changeRow($row, -$qty, -$carry);
         Db::exec(
-            'INSERT INTO {stock} (warehouse_id, bin_id, item_id, lot_id, serial_id, status, qty, qty_allocated, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            'INSERT INTO {stock} (tenant_id, warehouse_id, bin_id, item_id, lot_id, serial_id, status, qty, qty_allocated, updated_at) VALUES ({tid}, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE qty = qty + VALUES(qty), qty_allocated = qty_allocated + VALUES(qty_allocated), updated_at = VALUES(updated_at)',
             [$row['warehouse_id'], $toB, $row['item_id'], $row['lot_id'], $row['serial_id'], $toS, $qty, $carry, Db::now()]
         );
-        $dest = (int) Db::value('SELECT id FROM {stock} WHERE bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ?', [$toB, $row['item_id'], (int) $row['lot_id'], (int) $row['serial_id'], $toS]);
+        $dest = (int) Db::value('SELECT id FROM {stock} WHERE tenant_id = {tid} AND bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ?', [$toB, $row['item_id'], (int) $row['lot_id'], (int) $row['serial_id'], $toS]);
         if ($allocId) {
-            $a = Db::row('SELECT * FROM {allocations} WHERE id = ?', [$allocId]);
+            $a = Db::row('SELECT * FROM {allocations} WHERE tenant_id = {tid} AND id = ?', [$allocId]);
             if ((float) $a['qty'] - $qty > self::EPS) { // part of the reservation moves: split it
-                Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE id = ?', [$qty, $allocId]);
+                Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE tenant_id = {tid} AND id = ?', [$qty, $allocId]);
                 $allocId = Db::insert('allocations', ['stock_id' => $dest, 'doc_type' => $a['doc_type'], 'doc_id' => $a['doc_id'], 'doc_line_id' => $a['doc_line_id'], 'qty' => $qty, 'stage' => $p['stage'] ?? 'picked', 'status' => 'active', 'created_at' => Db::now()]);
             } else {
-                Db::exec('UPDATE {allocations} SET stock_id = ?, stage = ? WHERE id = ?', [$dest, $p['stage'] ?? 'picked', $allocId]);
+                Db::exec('UPDATE {allocations} SET stock_id = ?, stage = ? WHERE tenant_id = {tid} AND id = ?', [$dest, $p['stage'] ?? 'picked', $allocId]);
             }
         }
         $mid = self::movement($p + ['warehouse_id' => $row['warehouse_id'], 'item_id' => $row['item_id']], (int) $row['bin_id'], $toB, $row['status'], $toS, $row['lot_id'] ? (int) $row['lot_id'] : null, $row['serial_id'] ? (int) $row['serial_id'] : null, null);
@@ -238,24 +238,24 @@ final class Ledger
             throw new \LogicException('Stock row ' . $row['id'] . ' would become inconsistent.');
         }
         if ($newQty <= self::EPS && $newAlloc <= self::EPS) {
-            Db::exec('DELETE FROM {stock} WHERE id = ?', [$row['id']]);
+            Db::exec('DELETE FROM {stock} WHERE tenant_id = {tid} AND id = ?', [$row['id']]);
         } else {
-            Db::exec('UPDATE {stock} SET qty = ?, qty_allocated = ?, updated_at = ? WHERE id = ?', [max(0, $newQty), max(0, $newAlloc), Db::now(), $row['id']]);
+            Db::exec('UPDATE {stock} SET qty = ?, qty_allocated = ?, updated_at = ? WHERE tenant_id = {tid} AND id = ?', [max(0, $newQty), max(0, $newAlloc), Db::now(), $row['id']]);
         }
     }
 
     /** Consume (part of) an allocation on a stock row; returns the reserved quantity used. */
     private static function takeAllocation(int $allocId, int $stockId, float $qty): float
     {
-        $a = Db::row("SELECT * FROM {allocations} WHERE id = ? AND status = 'active' FOR UPDATE", [$allocId]);
+        $a = Db::row("SELECT * FROM {allocations} WHERE tenant_id = {tid} AND id = ? AND status = 'active' FOR UPDATE", [$allocId]);
         if (! $a || (int) $a['stock_id'] !== $stockId) {
             throw new BizException('That reservation does not cover this stock.');
         }
         $use = min($qty, (float) $a['qty']);
         if ((float) $a['qty'] - $use <= self::EPS) {
-            Db::exec("UPDATE {allocations} SET status = 'consumed' WHERE id = ?", [$allocId]);
+            Db::exec("UPDATE {allocations} SET status = 'consumed' WHERE tenant_id = {tid} AND id = ?", [$allocId]);
         } else {
-            Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE id = ?', [$use, $allocId]);
+            Db::exec('UPDATE {allocations} SET qty = qty - ? WHERE tenant_id = {tid} AND id = ?', [$use, $allocId]);
         }
         return self::q($use);
     }

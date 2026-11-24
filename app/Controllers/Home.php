@@ -13,7 +13,7 @@ class Home extends BaseController
     {
         [$w, $b] = Access::whereWarehouse('stock.view', 'm.warehouse_id');
         return $this->render('home/index', ['todo' => Dashboard::todo(), 'fig' => Dashboard::figures(),
-            'recent' => Access::can('stock.view') ? Db::rows("SELECT m.at, m.type, m.qty, i.sku, w.code wh, u.name user FROM {movements} m JOIN {items} i ON i.id = m.item_id JOIN {warehouses} w ON w.id = m.warehouse_id LEFT JOIN {users} u ON u.id = m.user_id WHERE $w ORDER BY m.id DESC LIMIT 8", $b) : []], 'Home');
+            'recent' => Access::can('stock.view') ? Db::rows("SELECT m.at, m.type, m.qty, i.sku, w.code wh, u.name user FROM {movements} m JOIN {items} i ON i.id = m.item_id JOIN {warehouses} w ON w.id = m.warehouse_id LEFT JOIN {users} u ON u.id = m.user_id WHERE m.tenant_id = {tid} AND $w ORDER BY m.id DESC LIMIT 8", $b) : []], 'Home');
     }
 
     public function ping()
@@ -46,21 +46,21 @@ class Home extends BaseController
         $ids = \App\Libraries\Core\Access::warehouses('stock.view');
         if ($ids) {
             $cur = (int) session('wh');
-            $bin = Db::row('SELECT id FROM {bins} WHERE code = ? AND warehouse_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY warehouse_id = ? DESC, id LIMIT 1', [strtoupper($q), $cur]);
+            $bin = Db::row('SELECT id FROM {bins} WHERE tenant_id = {tid} AND code = ? AND warehouse_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY warehouse_id = ? DESC, id LIMIT 1', [strtoupper($q), $cur]);
             if ($bin) {
                 return redirect()->to(site_url('bins/' . $bin['id']));
             }
         }
-        if ($l = Db::row('SELECT id FROM {lots} WHERE lot_no = ? ORDER BY id DESC LIMIT 1', [strtoupper($q)])) {
+        if ($l = Db::row('SELECT id FROM {lots} WHERE tenant_id = {tid} AND lot_no = ? ORDER BY id DESC LIMIT 1', [strtoupper($q)])) {
             return redirect()->to(site_url('lots/' . $l['id']));
         }
-        if ($s = Db::row('SELECT id FROM {serials} WHERE serial_no = ? ORDER BY id DESC LIMIT 1', [$q])) {
+        if ($s = Db::row('SELECT id FROM {serials} WHERE tenant_id = {tid} AND serial_no = ? ORDER BY id DESC LIMIT 1', [$q])) {
             return redirect()->to(site_url('serials/' . $s['id']));
         }
         $docs = ['purchase_orders' => 'purchase-orders', 'receipts' => 'receipts', 'transfers' => 'transfers', 'sales_orders' => 'orders', 'shipments' => 'shipments',
             'production_runs' => 'production/runs', 'adjustments' => 'adjustments', 'counts' => 'counts', 'trips' => 'fleet/trips', 'pick_waves' => 'waves'];
         foreach ($docs as $t => $url) {
-            if ($d = Db::row("SELECT id FROM {{$t}} WHERE number = ?", [strtoupper($q)])) {
+            if ($d = Db::row("SELECT id FROM {{$t}} WHERE tenant_id = {tid} AND number = ?", [strtoupper($q)])) {
                 return redirect()->to(site_url($url . '/' . $d['id']));
             }
         }
@@ -69,13 +69,13 @@ class Home extends BaseController
 
     public function notifications()
     {
-        $rows = Db::rows('SELECT * FROM {notifications} WHERE user_id = ? ORDER BY id DESC LIMIT 100', [Auth::id()]);
+        $rows = Db::rows('SELECT * FROM {notifications} WHERE tenant_id = {tid} AND user_id = ? ORDER BY id DESC LIMIT 100', [Auth::id()]);
         return $this->render('home/notifications', ['rows' => $rows], 'Messages');
     }
 
     public function readAll()
     {
-        Db::exec('UPDATE {notifications} SET read_at = ? WHERE user_id = ? AND read_at IS NULL', [Db::now(), Auth::id()]);
+        Db::exec('UPDATE {notifications} SET read_at = ? WHERE tenant_id = {tid} AND user_id = ? AND read_at IS NULL', [Db::now(), Auth::id()]);
         return redirect()->to(site_url('notifications'));
     }
 }

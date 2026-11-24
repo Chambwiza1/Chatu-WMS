@@ -20,9 +20,9 @@ class Receiving extends BaseController
         }
         $wh = $this->wh();
         $rows = Db::rows('SELECT r.*, s.name supplier, p.number po_number, u.name posted_name FROM {receipts} r LEFT JOIN {suppliers} s ON s.id = r.supplier_id LEFT JOIN {purchase_orders} p ON p.id = r.po_id
-                           LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.warehouse_id = ? ORDER BY r.id DESC LIMIT 200', [$wh]);
-        $due = Db::rows("SELECT p.id, p.number, p.expected_date, s.name supplier FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id WHERE p.warehouse_id = ? AND p.status IN ('open','partly_received') ORDER BY p.expected_date IS NULL, p.expected_date", [$wh]);
-        $returns = Db::rows('SELECT r.*, s.name supplier FROM {supplier_returns} r JOIN {suppliers} s ON s.id = r.supplier_id WHERE r.warehouse_id = ? ORDER BY r.id DESC LIMIT 30', [$wh]);
+                           LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.tenant_id = {tid} AND r.warehouse_id = ? ORDER BY r.id DESC LIMIT 200', [$wh]);
+        $due = Db::rows("SELECT p.id, p.number, p.expected_date, s.name supplier FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id WHERE p.tenant_id = {tid} AND p.warehouse_id = ? AND p.status IN ('open','partly_received') ORDER BY p.expected_date IS NULL, p.expected_date", [$wh]);
+        $returns = Db::rows('SELECT r.*, s.name supplier FROM {supplier_returns} r JOIN {suppliers} s ON s.id = r.supplier_id WHERE r.tenant_id = {tid} AND r.warehouse_id = ? ORDER BY r.id DESC LIMIT 30', [$wh]);
         return $this->render('receiving/index', ['rows' => $rows, 'due' => $due, 'returns' => $returns, 'wh' => $wh], 'Goods received');
     }
 
@@ -57,7 +57,7 @@ class Receiving extends BaseController
             $d          = (array) $this->request->getPost();
             $d['lines'] = $this->lines();
             $id         = Receipts::post($d, $this->in('op_token'));
-            return $this->ok('Received. ' . (Db::value('SELECT COUNT(*) FROM {receipt_lines} WHERE receipt_id = ? AND qty_quarantine > 0', [$id]) ? 'Held units are in QUARANTINE for inspection. ' : '') . 'Put the goods away next.', 'receipts/' . $id);
+            return $this->ok('Received. ' . (Db::value('SELECT COUNT(*) FROM {receipt_lines} WHERE tenant_id = {tid} AND receipt_id = ? AND qty_quarantine > 0', [$id]) ? 'Held units are in QUARANTINE for inspection. ' : '') . 'Put the goods away next.', 'receipts/' . $id);
         }, $back);
     }
 
@@ -74,7 +74,7 @@ class Receiving extends BaseController
     {
         $wh = $this->wh('receive.post');
         if ($sid = (int) $this->request->getGet('stock_id')) {
-            $wh = (int) Db::value('SELECT warehouse_id FROM {stock} WHERE id = ?', [$sid]) ?: $wh;
+            $wh = (int) Db::value('SELECT warehouse_id FROM {stock} WHERE tenant_id = {tid} AND id = ?', [$sid]) ?: $wh;
         }
         if ($r = $this->need('receive.post', $wh ?: null)) {
             return $r;
@@ -92,9 +92,9 @@ class Receiving extends BaseController
             $w .= " AND s.status IN ('quarantine','damaged')";
         }
         $rows = Db::rows("SELECT s.*, i.sku, i.name, i.uom, i.decimals, b.code bin, l.lot_no, l.expiry_date, l.supplier_id, se.serial_no FROM {stock} s JOIN {items} i ON i.id = s.item_id JOIN {bins} b ON b.id = s.bin_id
-                           LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE $w ORDER BY s.status DESC, i.sku LIMIT 200", $b);
+                           LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE s.tenant_id = {tid} AND $w ORDER BY s.status DESC, i.sku LIMIT 200", $b);
         return $this->render('receiving/return', ['rows' => $rows, 'wh' => $wh, 'q' => $q, 'suppliers' => Parties::options('suppliers'),
-            'reasons' => Db::rows("SELECT * FROM {reasons} WHERE use_for = 'supplier_return' AND active = 1 ORDER BY label")], 'Return to supplier');
+            'reasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'supplier_return' AND active = 1 ORDER BY label")], 'Return to supplier');
     }
 
     public function returnPost()

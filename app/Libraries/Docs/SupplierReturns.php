@@ -21,11 +21,11 @@ final class SupplierReturns
         return (int) Db::atomic(static function () use ($d, $wh, $token) {
             return Db::once($token, Auth::id(), static function () use ($d, $wh) {
                 $sup = (int) ($d['supplier_id'] ?? 0);
-                if (! Db::value('SELECT 1 FROM {suppliers} WHERE id = ?', [$sup])) {
+                if (! Db::value('SELECT 1 FROM {suppliers} WHERE tenant_id = {tid} AND id = ?', [$sup])) {
                     throw new BizException('Choose the supplier.');
                 }
                 $reason = (string) ($d['reason_code'] ?? '');
-                if (! Db::value("SELECT 1 FROM {reasons} WHERE use_for = 'supplier_return' AND code = ? AND active = 1", [$reason])) {
+                if (! Db::value("SELECT 1 FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'supplier_return' AND code = ? AND active = 1", [$reason])) {
                     throw new BizException('Choose a reason for the return.');
                 }
                 $lines = [];
@@ -34,7 +34,7 @@ final class SupplierReturns
                     if ($q <= 0) {
                         continue;
                     }
-                    $row = Db::row('SELECT * FROM {stock} WHERE id = ?', [(int) ($l['stock_id'] ?? 0)]);
+                    $row = Db::row('SELECT * FROM {stock} WHERE tenant_id = {tid} AND id = ?', [(int) ($l['stock_id'] ?? 0)]);
                     if (! $row || (int) $row['warehouse_id'] !== $wh) {
                         throw new BizException('That stock is not in this warehouse.');
                     }
@@ -54,7 +54,7 @@ final class SupplierReturns
                     $r = Ledger::remove(['stock_id' => (int) $row['id'], 'qty' => $q, 'type' => 'supplier_return', 'doc_type' => 'supplier_return', 'doc_id' => $id, 'reason_code' => $reason, 'serial_status' => 'returned_supplier']);
                     $value += $r['value'];
                 }
-                Db::exec('UPDATE {supplier_returns} SET value = ? WHERE id = ?', [round($value, 2), $id]);
+                Db::exec('UPDATE {supplier_returns} SET value = ? WHERE tenant_id = {tid} AND id = ?', [round($value, 2), $id]);
                 Audit::log('supplier_return.post', 'supplier_return', $id, null, ['lines' => count($lines), 'value' => round($value, 2), 'reason' => $reason]);
                 return $id;
             });

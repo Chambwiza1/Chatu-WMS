@@ -19,7 +19,7 @@ return [
         $t->throws(static fn () => Receipts::post(['warehouse_id' => $t->wh('LSK'), 'po_id' => $po, 'lines' => [['po_line_id' => 1, 'qty_accepted' => 10]]]), 'is draft');
         $t->as('bella');
         Purchasing::issue($po);
-        $line = (int) Db::value('SELECT id FROM {po_lines} WHERE po_id = ?', [$po]);
+        $line = (int) Db::value('SELECT id FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$po]);
         $t->as('steve');
         Receipts::post(['warehouse_id' => $t->wh('LSK'), 'po_id' => $po, 'lines' => [['po_line_id' => $line, 'qty_accepted' => 60]]]);
         $t->eq('partly_received', Purchasing::get($po)['status']);
@@ -37,7 +37,7 @@ return [
         $t->throws(static fn () => $t->receive('LSK', [['MILK1', 12, 12, ['lot_no' => 'M1', 'expiry_date' => '2027-02-28']]]), 'already recorded with expiry');
         $t->receive('LSK', [['MILK1', 12, 13, ['lot_no' => 'M1', 'expiry_date' => '2027-01-31']]]);
         $t->eq(36.0, $t->qty('LSK', 'MILK1'));
-        $t->eq(1, (int) Db::value("SELECT COUNT(*) FROM {lots} WHERE lot_no = 'M1'"), 'batch numbers are stored in capitals, one row');
+        $t->eq(1, (int) Db::value("SELECT COUNT(*) FROM {lots} WHERE tenant_id = {tid} AND lot_no = 'M1'"), 'batch numbers are stored in capitals, one row');
     },
 
     'RCV-3 serial items: one number per unit, unique while in stock; held units go to quarantine' => static function (TestKit $t) {
@@ -47,7 +47,7 @@ return [
         $t->eq(2.0, $t->qty('LSK', 'PHONE', 'available'));
         $t->eq(1.0, $t->qty('LSK', 'PHONE', 'quarantine', 'QUARANTINE'));
         $t->throws(static fn () => $t->receive('KTW', [['PHONE', 1, 1500, ['serials' => 'S2']]]), 'already in stock');
-        $t->true((bool) Db::value("SELECT 1 FROM {notifications} n JOIN {users} u ON u.id = n.user_id WHERE u.username = 'wendy' AND n.type = 'inspection'"), 'the warehouse manager is told about held goods');
+        $t->true((bool) Db::value("SELECT 1 FROM {notifications} n JOIN {users} u ON u.id = n.user_id WHERE n.tenant_id = {tid} AND u.username = 'wendy' AND n.type = 'inspection'"), 'the warehouse manager is told about held goods');
     },
 
     'RCV-4 rejected units never enter stock or cost, and need a reason' => static function (TestKit $t) {
@@ -61,7 +61,7 @@ return [
 
     'RCV-5 permissions are per warehouse; a double submit posts once' => static function (TestKit $t) {
         $t->as('kim');
-        $t->throws(static fn () => Receipts::post(['warehouse_id' => $t->wh('LSK'), 'supplier_id' => $t->c['supplier']['ZAMMILL'], 'lines' => [['item_id' => $t->item('RICE5'), 'qty_accepted' => 1, 'unit_cost' => 1]]]), 'outside your area', DeniedException::class);
+        $t->throws(static fn () => Receipts::post(['warehouse_id' => $t->wh('LSK'), 'supplier_id' => $t->c['supplier']['ZAMMILL'], 'lines' => [['item_id' => $t->item('RICE5'), 'qty_accepted' => 1, 'unit_cost' => 1]]]), 'not one of yours', DeniedException::class);
         $t->as('steve');
         $d = ['warehouse_id' => $t->wh('LSK'), 'supplier_id' => $t->c['supplier']['ZAMMILL'], 'lines' => [['item_id' => $t->item('RICE5'), 'qty_accepted' => 5, 'unit_cost' => 80]]];
         $a = Receipts::post($d, 'tok-12345678');
@@ -107,10 +107,10 @@ return [
             ['stock_id' => $t->row('LSK', 'RICE5', 'STOCK'), 'qty' => 12],
             ['stock_id' => $t->row('LSK', 'PHONE', 'STOCK'), 'qty' => 1],
         ]]);
-        $t->eq(10 * 80 + 2 * 100 + 1500.0, (float) Db::value('SELECT value FROM {supplier_returns} WHERE id = ?', [$id]), 'oldest cost first');
-        $t->eq('returned_supplier', Db::value("SELECT status FROM {serials} WHERE serial_no = 'R1'"));
+        $t->eq(10 * 80 + 2 * 100 + 1500.0, (float) Db::value('SELECT value FROM {supplier_returns} WHERE tenant_id = {tid} AND id = ?', [$id]), 'oldest cost first');
+        $t->eq('returned_supplier', Db::value("SELECT status FROM {serials} WHERE tenant_id = {tid} AND serial_no = 'R1'"));
         $t->receive('LSK', [['PHONE', 1, 1450, ['serials' => 'R1']]]);
-        $t->eq('in_stock', Db::value("SELECT status FROM {serials} WHERE serial_no = 'R1'"));
-        $t->eq(1, (int) Db::value("SELECT COUNT(*) FROM {serials} WHERE serial_no = 'R1'"), 'the same serial row comes back');
+        $t->eq('in_stock', Db::value("SELECT status FROM {serials} WHERE tenant_id = {tid} AND serial_no = 'R1'"));
+        $t->eq(1, (int) Db::value("SELECT COUNT(*) FROM {serials} WHERE tenant_id = {tid} AND serial_no = 'R1'"), 'the same serial row comes back');
     },
 ];

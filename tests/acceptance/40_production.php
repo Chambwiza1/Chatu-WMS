@@ -41,7 +41,7 @@ return [
         $r = $recipe($t);
         $t->as('paul');
         $t->throws(static fn () => Production::post(['recipe_id' => $r, 'warehouse_id' => $t->wh('LSK'), 'batches' => 3]), 'Not enough FLOUR');
-        $t->eq(0, (int) Db::value('SELECT COUNT(*) FROM {production_runs}'), 'nothing posted');
+        $t->eq(0, (int) Db::value('SELECT COUNT(*) FROM {production_runs} WHERE tenant_id = {tid}'), 'nothing posted');
         \App\Libraries\Docs\Moves::post(['warehouse_id' => $t->wh('LSK'), 'lines' => [['stock_id' => $t->row('LSK', 'FLOUR', 'STOCK', 'F-NEW'), 'qty' => 40, 'to_bin_id' => $t->bin('LSK', 'PRODUCTION')]]]);
         $run = Production::post(['recipe_id' => $r, 'warehouse_id' => $t->wh('LSK'), 'batches' => 1]);
         $t->eq(['F-NEW'], array_values(array_unique(array_filter(array_column(Production::run($run)['inputs'], 'lot_no')))), 'staged material used first');
@@ -65,7 +65,7 @@ return [
         $t->as('sally');
         $so = Sales::saveDraft(['customer_id' => $t->c['customer']['SHOPRITE'], 'warehouse_id' => $t->wh('LSK'), 'lines' => [['item_id' => $t->item('BREAD'), 'qty' => 10]]]);
         Sales::confirm($so);
-        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE sku = 'BREAD'");
+        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE tenant_id = {tid} AND sku = 'BREAD'");
         \App\Libraries\Master\Items::flush();
         $t->as('steve');
         $sh = Shipments::create($so);
@@ -81,22 +81,22 @@ return [
         $r = $recipe($t);
         $t->as('paul');
         $run = Production::post(['recipe_id' => $r, 'warehouse_id' => $t->wh('LSK'), 'batches' => 1, 'lot_no' => 'B-0001']);
-        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE sku = 'BREAD'");
+        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE tenant_id = {tid} AND sku = 'BREAD'");
         \App\Libraries\Master\Items::flush();
         $t->as('sally');
         $so = Sales::saveDraft(['customer_id' => $t->c['customer']['NDOLA'], 'warehouse_id' => $t->wh('LSK'), 'lines' => [['item_id' => $t->item('BREAD'), 'qty' => 30]]]);
         Sales::confirm($so);
-        Db::exec("UPDATE {customers} SET min_shelf_days = 0");
+        Db::exec("UPDATE {customers} SET min_shelf_days = 0 WHERE tenant_id = {tid}");
         $t->as('steve');
         $sh = Shipments::create($so);
         Shipments::pick($sh);
         Shipments::pack($sh, 1);
         Shipments::dispatch($sh);
-        $lot = (int) Db::value("SELECT id FROM {lots} WHERE lot_no = 'B-0001'");
+        $lot = (int) Db::value("SELECT id FROM {lots} WHERE tenant_id = {tid} AND lot_no = 'B-0001'");
         $tr  = \App\Libraries\Reports\Trace::lot($lot);
         $t->eq(['F-OLD'], array_column($tr['made_from'], 'lot_no'), 'back to the flour batch');
         $t->eq(['Ndola Wholesalers'], array_values(array_unique(array_column($tr['customers'], 'customer'))), 'forward to the customer');
-        $flour = (int) Db::value("SELECT id FROM {lots} WHERE lot_no = 'F-OLD'");
+        $flour = (int) Db::value("SELECT id FROM {lots} WHERE tenant_id = {tid} AND lot_no = 'F-OLD'");
         $t->eq(['B-0001'], array_column(\App\Libraries\Reports\Trace::lot($flour)['used_in'], 'lot_no'), 'flour batch forward to the bread batch');
         $t->eq(['Ndola Wholesalers'], array_values(array_unique(array_column(\App\Libraries\Reports\Trace::lot($flour)['customers'], 'customer'))), 'flour batch forward to the customer through the bread');
     },

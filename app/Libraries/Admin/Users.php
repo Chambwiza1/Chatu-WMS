@@ -101,7 +101,7 @@ final class Users
             if (! in_array($scopeType, ['system', 'warehouse'], true)) {
                 throw new BizException('Choose company-wide or one warehouse.');
             }
-            if ($scopeType === 'warehouse' && ! Db::value('SELECT 1 FROM {warehouses} WHERE id = ?', [(int) $scopeId])) {
+            if ($scopeType === 'warehouse' && ! Db::value('SELECT 1 FROM {warehouses} WHERE tenant_id = {tid} AND id = ?', [(int) $scopeId])) {
                 throw new BizException('Choose the warehouse this role applies to.');
             }
             if ($scopeType === 'system') {
@@ -115,7 +115,7 @@ final class Users
                     throw new BizException('Segregation of duties: ' . $c['description'] . ' (' . $c['a_name'] . ' and ' . $c['b_name'] . '). Give the role to someone else.');
                 }
             }
-            Db::exec('INSERT IGNORE INTO {user_roles} (user_id, role_id, scope_type, scope_id) VALUES (?, ?, ?, ?)', [$userId, $role['id'], $scopeType, $scopeId]);
+            Db::exec('INSERT IGNORE INTO {user_roles} (tenant_id, user_id, role_id, scope_type, scope_id) VALUES ({tid}, ?, ?, ?, ?)', [$userId, $role['id'], $scopeType, $scopeId]);
             Audit::log('role.grant', 'user', $userId, null, ['role' => $roleCode, 'scope' => $scopeType, 'scope_id' => $scopeId]);
         });
         Access::flush();
@@ -125,14 +125,14 @@ final class Users
     {
         Access::require('admin.users');
         Db::atomic(static function () use ($userRoleId) {
-            $ur = Db::row('SELECT ur.*, r.code FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id WHERE ur.id = ?', [$userRoleId]);
+            $ur = Db::row('SELECT ur.*, r.code FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id WHERE ur.tenant_id = {tid} AND ur.id = ?', [$userRoleId]);
             if (! $ur) {
                 throw new BizException('Not found.');
             }
             if ((int) $ur['user_id'] === Auth::id() && $ur['code'] === 'system_admin') {
                 throw new BizException('You cannot remove your own administrator role.');
             }
-            Db::exec('DELETE FROM {user_roles} WHERE id = ?', [$userRoleId]);
+            Db::exec('DELETE FROM {user_roles} WHERE tenant_id = {tid} AND id = ?', [$userRoleId]);
             Audit::log('role.revoke', 'user', $ur['user_id'], ['role' => $ur['code'], 'scope' => $ur['scope_type'], 'scope_id' => $ur['scope_id']]);
         });
         Access::flush();
@@ -141,7 +141,7 @@ final class Users
     public static function list(): array
     {
         return Db::rows("SELECT u.*, (SELECT GROUP_CONCAT(CONCAT(r.name, IF(ur.scope_type = 'warehouse', CONCAT(' (', w.code, ')'), '')) ORDER BY r.rank_level DESC SEPARATOR ', ')
-                                       FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id LEFT JOIN {warehouses} w ON w.id = ur.scope_id AND ur.scope_type = 'warehouse' WHERE ur.user_id = u.id) roles
+                                       FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id LEFT JOIN {warehouses} w ON w.id = ur.scope_id AND ur.scope_type = 'warehouse' WHERE ur.tenant_id = {tid} AND ur.user_id = u.id) roles
                            FROM {users} u ORDER BY u.active DESC, u.name");
     }
 }

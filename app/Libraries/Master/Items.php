@@ -23,7 +23,7 @@ final class Items
     public static function get(int $id): array
     {
         if (! isset(self::$cache[$id])) {
-            $r = Db::row('SELECT * FROM {items} WHERE id = ?', [$id]);
+            $r = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND id = ?', [$id]);
             if (! $r) {
                 throw new BizException('Unknown item.');
             }
@@ -47,11 +47,11 @@ final class Items
         if ($code === '') {
             return [null, null];
         }
-        $r = Db::row('SELECT * FROM {items} WHERE sku = ? OR (barcode = ? AND barcode <> \'\')', [strtoupper($code), $code]);
+        $r = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND sku = ? OR (barcode = ? AND barcode <> \'\')', [strtoupper($code), $code]);
         if ($r) {
             return [$r, null];
         }
-        $u = Db::row("SELECT i.*, u.name pack_name FROM {item_units} u JOIN {items} i ON i.id = u.item_id WHERE u.barcode = ? AND u.barcode <> ''", [$code]);
+        $u = Db::row("SELECT i.*, u.name pack_name FROM {item_units} u JOIN {items} i ON i.id = u.item_id WHERE u.tenant_id = {tid} AND u.barcode = ? AND u.barcode <> ''", [$code]);
         if ($u) {
             $pack = $u['pack_name'];
             unset($u['pack_name']);
@@ -86,7 +86,7 @@ final class Items
                 $row[$k] = round((float) str_replace(',', '', (string) $row[$k]) / $f, 4);
             }
         }
-        $row['pack_unit']   = Db::value('SELECT name FROM {item_units} WHERE item_id = ? AND name = ?', [$item['id'], $unit]);
+        $row['pack_unit']   = Db::value('SELECT name FROM {item_units} WHERE tenant_id = {tid} AND item_id = ? AND name = ?', [$item['id'], $unit]);
         $row['pack_factor'] = $f;
         return $row;
     }
@@ -105,7 +105,7 @@ final class Items
     /** Pack sizes of an item: [[name, factor, barcode, buy_default, sell_default], ...]. */
     public static function units(int $itemId): array
     {
-        return Db::rows('SELECT * FROM {item_units} WHERE item_id = ? ORDER BY factor', [$itemId]);
+        return Db::rows('SELECT * FROM {item_units} WHERE tenant_id = {tid} AND item_id = ? ORDER BY factor', [$itemId]);
     }
 
     /** How many base units one $unit holds (1 for the base unit). */
@@ -115,7 +115,7 @@ final class Items
         if ($unit === '' || strcasecmp($unit, $item['uom']) === 0) {
             return 1.0;
         }
-        $f = Db::value('SELECT factor FROM {item_units} WHERE item_id = ? AND name = ?', [$item['id'], $unit]);
+        $f = Db::value('SELECT factor FROM {item_units} WHERE tenant_id = {tid} AND item_id = ? AND name = ?', [$item['id'], $unit]);
         if ($f === null) {
             throw new BizException($item['sku'] . ' has no pack called "' . $unit . '".');
         }
@@ -150,12 +150,12 @@ final class Items
             }
             $seen[$name] = true;
             $bc = trim((string) ($u['barcode'] ?? ''));
-            if ($bc !== '' && (Db::value("SELECT 1 FROM {items} WHERE barcode = ? OR sku = ?", [$bc, strtoupper($bc)]) || Db::value('SELECT 1 FROM {item_units} WHERE barcode = ? AND item_id <> ?', [$bc, $id]))) {
+            if ($bc !== '' && (Db::value("SELECT 1 FROM {items} WHERE tenant_id = {tid} AND barcode = ? OR sku = ?", [$bc, strtoupper($bc)]) || Db::value('SELECT 1 FROM {item_units} WHERE tenant_id = {tid} AND barcode = ? AND item_id <> ?', [$bc, $id]))) {
                 throw new BizException('Barcode ' . $bc . ' is already used by another item or pack.');
             }
             $rows[] = ['item_id' => $id, 'name' => $name, 'factor' => $f, 'barcode' => $bc ?: null, 'buy_default' => ! empty($u['buy_default']) ? 1 : 0, 'sell_default' => ! empty($u['sell_default']) ? 1 : 0];
         }
-        Db::exec('DELETE FROM {item_units} WHERE item_id = ?', [$id]);
+        Db::exec('DELETE FROM {item_units} WHERE tenant_id = {tid} AND item_id = ?', [$id]);
         foreach ($rows as $r) {
             Db::insert('item_units', $r);
         }
@@ -203,7 +203,7 @@ final class Items
 
     public static function save(array $d, ?int $id = null): int
     {
-        Access::require('item.manage');
+        Access::requireSave('item', $id === null, $id !== null && isset($d['active']) && ! $d['active']);
         $sku = strtoupper(trim((string) ($d['sku'] ?? '')));
         if ($sku === '' || ! preg_match('/^[A-Z0-9._\/-]{1,40}$/', $sku)) {
             throw new BizException('Item code: letters, numbers, dot, dash, slash; up to 40 characters.');
@@ -238,25 +238,25 @@ final class Items
             throw new BizException('An expiry date belongs to a batch: choose batch tracking for items with expiry dates.');
         }
         return Db::atomic(static function () use ($row, $id, $sku, $d) {
-            $clash = Db::value('SELECT id FROM {items} WHERE sku = ? AND id <> ?', [$sku, $id ?? 0]);
+            $clash = Db::value('SELECT id FROM {items} WHERE tenant_id = {tid} AND sku = ? AND id <> ?', [$sku, $id ?? 0]);
             if ($clash) {
                 throw new BizException('Item code ' . $sku . ' is already used.');
             }
-            if ($row['barcode'] && (Db::value('SELECT 1 FROM {item_units} WHERE barcode = ? AND item_id <> ?', [$row['barcode'], $id ?? 0])
-                || Db::value('SELECT 1 FROM {items} WHERE barcode = ? AND id <> ?', [$row['barcode'], $id ?? 0]))) {
+            if ($row['barcode'] && (Db::value('SELECT 1 FROM {item_units} WHERE tenant_id = {tid} AND barcode = ? AND item_id <> ?', [$row['barcode'], $id ?? 0])
+                || Db::value('SELECT 1 FROM {items} WHERE tenant_id = {tid} AND barcode = ? AND id <> ?', [$row['barcode'], $id ?? 0]))) {
                 throw new BizException('Barcode ' . $row['barcode'] . ' is already used by another item or pack.');
             }
             if ($id) {
-                $old = Db::row('SELECT * FROM {items} WHERE id = ? FOR UPDATE', [$id]);
+                $old = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
                 if (! $old) {
                     throw new BizException('Unknown item.');
                 }
-                $hasStock = (bool) Db::value('SELECT 1 FROM {movements} WHERE item_id = ? LIMIT 1', [$id]);
+                $hasStock = (bool) Db::value('SELECT 1 FROM {movements} WHERE tenant_id = {tid} AND item_id = ? LIMIT 1', [$id]);
                 if ($hasStock && ($old['tracking'] !== $row['tracking'] || (int) $old['decimals'] > $row['decimals'])) {
                     throw new BizException('Tracking and decimals cannot change once the item has stock movements. Create a new item code instead.');
                 }
                 $sets = implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row)));
-                Db::exec("UPDATE {items} SET $sets, updated_at = ? WHERE id = ?", array_merge(array_values($row), [Db::now(), $id]));
+                Db::exec("UPDATE {items} SET $sets, updated_at = ? WHERE tenant_id = {tid} AND id = ?", array_merge(array_values($row), [Db::now(), $id]));
                 Audit::log('item.update', 'item', $id, array_intersect_key($old, $row), $row);
                 if (array_key_exists('units', $d)) {
                     self::saveUnits($id, $row + ['id' => $id, 'sku' => $sku], (array) $d['units']);
@@ -275,17 +275,17 @@ final class Items
 
     public static function categories(): array
     {
-        return Db::rows('SELECT * FROM {item_categories} WHERE active = 1 ORDER BY name');
+        return Db::rows('SELECT * FROM {item_categories} WHERE tenant_id = {tid} AND active = 1 ORDER BY name');
     }
 
     public static function addCategory(string $name): int
     {
-        Access::require('item.manage');
+        Access::require('item.create');
         $name = trim($name);
         if ($name === '') {
             throw new BizException('Give the category a name.');
         }
-        $id = Db::value('SELECT id FROM {item_categories} WHERE name = ?', [$name]);
+        $id = Db::value('SELECT id FROM {item_categories} WHERE tenant_id = {tid} AND name = ?', [$name]);
         return $id ? (int) $id : Db::insert('item_categories', ['name' => mb_substr($name, 0, 100)]);
     }
 
@@ -299,7 +299,7 @@ final class Items
             $b = $kinds;
         }
         return Db::rows("SELECT i.id, i.sku, i.name, i.uom, i.tracking, i.decimals, i.expiry_required,
-                                (SELECT GROUP_CONCAT(CONCAT(u.name, ':', u.factor + 0, ':', u.buy_default, u.sell_default) ORDER BY u.factor SEPARATOR '|') FROM {item_units} u WHERE u.item_id = i.id) units
-                           FROM {items} i WHERE " . str_replace(['active', 'kind'], ['i.active', 'i.kind'], $w) . ' ORDER BY i.sku', $b);
+                                (SELECT GROUP_CONCAT(CONCAT(u.name, ':', u.factor + 0, ':', u.buy_default, u.sell_default) ORDER BY u.factor SEPARATOR '|') FROM {item_units} u WHERE u.tenant_id = {tid} AND u.item_id = i.id) units
+                           FROM {items} i WHERE i.tenant_id = {tid} AND " . str_replace(['active', 'kind'], ['i.active', 'i.kind'], $w) . ' ORDER BY i.sku', $b);
     }
 }

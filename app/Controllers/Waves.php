@@ -13,8 +13,8 @@ class Waves extends BaseController
         if ($r = $this->need('dispatch.manage', $wh ?: null)) {
             return $r;
         }
-        $waves = Db::rows('SELECT v.*, u.name created_name, (SELECT COUNT(*) FROM {shipments} s WHERE s.wave_id = v.id) n FROM {pick_waves} v LEFT JOIN {users} u ON u.id = v.created_by
-                            WHERE v.warehouse_id = ? ORDER BY v.status = \'open\' DESC, v.id DESC LIMIT 100', [$wh]);
+        $waves = Db::rows('SELECT v.*, u.name created_name, (SELECT COUNT(*) FROM {shipments} s WHERE s.tenant_id = {tid} AND s.wave_id = v.id) n FROM {pick_waves} v LEFT JOIN {users} u ON u.id = v.created_by
+                            WHERE v.tenant_id = {tid} AND v.warehouse_id = ? ORDER BY v.status = \'open\' DESC, v.id DESC LIMIT 100', [$wh]);
         return $this->render('waves/index', ['wh' => $wh, 'waves' => $waves, 'candidates' => W::candidates($wh)], 'Wave picking');
     }
 

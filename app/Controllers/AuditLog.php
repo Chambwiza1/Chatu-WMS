@@ -29,14 +29,14 @@ class AuditLog extends BaseController
             $b[]     = $f['outcome'];
         }
         $limit = $this->request->getGet('export') === 'csv' ? 100000 : 300;
-        $rows  = Db::rows('SELECT e.* FROM {audit_events} e WHERE ' . implode(' AND ', $where) . ' ORDER BY e.id DESC LIMIT ' . $limit, $b);
+        $rows  = Db::rows('SELECT e.* FROM {audit_events} e WHERE e.tenant_id = {tid} AND ' . implode(' AND ', $where) . ' ORDER BY e.id DESC LIMIT ' . $limit, $b);
         if ($this->request->getGet('export') === 'csv') {
             return $this->csv('audit-log', ['Id', 'When (UTC)', 'User', 'On behalf of', 'IP', 'Device', 'Action', 'Object', 'Object id', 'Request', 'Outcome', 'Detail', 'Before', 'After', 'Hash'],
                 array_map(static fn ($e) => [$e['id'], $e['at'], $e['username'], $e['on_behalf_of'], $e['ip'], $e['device_id'], $e['action'], $e['object_type'], $e['object_id'], $e['request_id'], $e['outcome'], $e['detail'], $e['before_json'], $e['after_json'], $e['hash']], $rows));
         }
         $verify = null;
         if ($this->request->getGet('verify') === '1') {
-            $bad    = Audit::verify();
+            $bad    = Audit::verify(\App\Libraries\Core\Tenancy::id());
             $verify = $bad === null ? 'The chain is intact: no record has been changed or removed.' : 'The chain breaks at event #' . $bad . '. A record was changed or removed outside the application.';
             Audit::log('audit.verify', null, null, null, null, $bad === null ? 'success' : 'failed', $verify);
         }

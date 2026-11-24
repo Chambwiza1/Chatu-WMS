@@ -50,11 +50,11 @@ class Reports extends BaseController
         }
         $q = trim((string) $this->request->getGet('q'));
         if ($q !== '') {
-            $lots = Db::rows('SELECT l.id, l.lot_no, i.sku, i.name FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.lot_no = ? OR l.supplier_lot = ?', [strtoupper($q), $q]);
+            $lots = Db::rows('SELECT l.id, l.lot_no, i.sku, i.name FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.lot_no = ? OR l.supplier_lot = ?', [strtoupper($q), $q]);
             if (count($lots) === 1) {
                 return redirect()->to(site_url('lots/' . $lots[0]['id']));
             }
-            $ser = Db::rows('SELECT s.id, s.serial_no, i.sku FROM {serials} s JOIN {items} i ON i.id = s.item_id WHERE s.serial_no = ?', [$q]);
+            $ser = Db::rows('SELECT s.id, s.serial_no, i.sku FROM {serials} s JOIN {items} i ON i.id = s.item_id WHERE s.tenant_id = {tid} AND s.serial_no = ?', [$q]);
             if (! $lots && count($ser) === 1) {
                 return redirect()->to(site_url('serials/' . $ser[0]['id']));
             }

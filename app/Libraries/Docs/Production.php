@@ -28,11 +28,11 @@ final class Production
 {
     public static function recipe(int $id): array
     {
-        $r = Db::row('SELECT r.*, i.sku, i.name item_name, i.uom, i.tracking, i.decimals FROM {recipes} r JOIN {items} i ON i.id = r.output_item_id WHERE r.id = ?', [$id]);
+        $r = Db::row('SELECT r.*, i.sku, i.name item_name, i.uom, i.tracking, i.decimals FROM {recipes} r JOIN {items} i ON i.id = r.output_item_id WHERE r.tenant_id = {tid} AND r.id = ?', [$id]);
         if (! $r) {
             throw new BizException('Unknown recipe.');
         }
-        $r['lines'] = Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking FROM {recipe_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.recipe_id = ? ORDER BY l.id', [$id]);
+        $r['lines'] = Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking FROM {recipe_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.recipe_id = ? ORDER BY l.id', [$id]);
         return $r;
     }
 
@@ -78,14 +78,14 @@ final class Production
             throw new BizException('Other cost cannot be negative.');
         }
         return Db::atomic(static function () use ($d, $id, $code, $out, $outQty, $lines, $other) {
-            if (Db::value('SELECT id FROM {recipes} WHERE code = ? AND id <> ?', [$code, $id ?? 0])) {
+            if (Db::value('SELECT id FROM {recipes} WHERE tenant_id = {tid} AND code = ? AND id <> ?', [$code, $id ?? 0])) {
                 throw new BizException('Recipe code ' . $code . ' is already used.');
             }
             $row = ['code' => $code, 'name' => trim((string) ($d['name'] ?? '')) ?: $out['name'], 'output_item_id' => $out['id'], 'output_qty' => $outQty,
                 'other_cost' => $other, 'notes' => trim((string) ($d['notes'] ?? '')) ?: null, 'active' => isset($d['active']) ? (int) (bool) $d['active'] : 1];
             if ($id) {
-                Db::exec('UPDATE {recipes} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE id = ?', array_merge(array_values($row), [$id]));
-                Db::exec('DELETE FROM {recipe_lines} WHERE recipe_id = ?', [$id]);
+                Db::exec('UPDATE {recipes} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($row), [$id]));
+                Db::exec('DELETE FROM {recipe_lines} WHERE tenant_id = {tid} AND recipe_id = ?', [$id]);
             } else {
                 $id = Db::insert('recipes', $row + ['created_at' => Db::now()]);
             }
@@ -171,9 +171,9 @@ final class Production
                 if (Items::lots($out)) {
                     $lotNo = trim((string) ($d['lot_no'] ?? ''));
                     if ($lotNo === '') {
-                        $lotNo = $out['sku'] . '-' . date('ymd', strtotime($day)) . '-' . substr(Db::value('SELECT number FROM {production_runs} WHERE id = ?', [$runId]), -3);
+                        $lotNo = $out['sku'] . '-' . date('ymd', strtotime($day)) . '-' . substr(Db::value('SELECT number FROM {production_runs} WHERE tenant_id = {tid} AND id = ?', [$runId]), -3);
                     }
-                    if (Db::value('SELECT 1 FROM {lots} WHERE item_id = ? AND lot_no = ?', [$out['id'], strtoupper($lotNo)])) {
+                    if (Db::value('SELECT 1 FROM {lots} WHERE tenant_id = {tid} AND item_id = ? AND lot_no = ?', [$out['id'], strtoupper($lotNo)])) {
                         throw new BizException('Batch ' . strtoupper($lotNo) . ' of ' . $out['sku'] . ' already exists. Each run makes its own batch.');
                     }
                     $expiry = ($d['expiry_date'] ?? '') !== '' ? $d['expiry_date'] : ($out['shelf_life_days'] ? date('Y-m-d', strtotime($day . ' +' . (int) $out['shelf_life_days'] . ' days')) : null);
@@ -181,8 +181,8 @@ final class Production
                 }
                 Ledger::add(['warehouse_id' => $wh, 'bin_id' => $bin, 'item_id' => (int) $out['id'], 'lot_id' => $lotId, 'status' => $status, 'qty' => $actual, 'unit_cost' => $unit,
                     'type' => 'production_out', 'doc_type' => 'production', 'doc_id' => $runId]);
-                Db::exec('UPDATE {production_runs} SET lot_id = ?, material_cost = ?, other_cost = ?, unit_cost = ? WHERE id = ?', [$lotId, round($material, 2), $otherCost, $unit, $runId]);
-                Db::exec('UPDATE {items} SET last_cost = ? WHERE id = ?', [$unit, $out['id']]);
+                Db::exec('UPDATE {production_runs} SET lot_id = ?, material_cost = ?, other_cost = ?, unit_cost = ? WHERE tenant_id = {tid} AND id = ?', [$lotId, round($material, 2), $otherCost, $unit, $runId]);
+                Db::exec('UPDATE {items} SET last_cost = ? WHERE tenant_id = {tid} AND id = ?', [$unit, $out['id']]);
                 Audit::log('production.post', 'production_run', $runId, null, ['recipe' => $rec['code'], 'batches' => $batches, 'expected' => $expected, 'actual' => $actual, 'unit_cost' => $unit]);
                 return $runId;
             });
@@ -232,7 +232,7 @@ final class Production
     {
         Db::atomic(static function () use ($runId, $reason, $token) {
             Db::once($token, Auth::id(), static function () use ($runId, $reason) {
-                $run = Db::row('SELECT * FROM {production_runs} WHERE id = ? FOR UPDATE', [$runId]);
+                $run = Db::row('SELECT * FROM {production_runs} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$runId]);
                 if (! $run) {
                     throw new BizException('Unknown run.');
                 }
@@ -244,7 +244,7 @@ final class Production
                 if (trim($reason) === '') {
                     throw new BizException('Say why the run is voided.');
                 }
-                $inputs = Db::rows('SELECT * FROM {production_inputs} WHERE run_id = ? AND qty > 0 ORDER BY id', [$runId]);
+                $inputs = Db::rows('SELECT * FROM {production_inputs} WHERE tenant_id = {tid} AND run_id = ? AND qty > 0 ORDER BY id', [$runId]);
                 Ledger::lock(array_map(static fn ($i) => [$wh, (int) $i['item_id']], array_merge($inputs, [['item_id' => $run['output_item_id']]])));
                 // take the output back: from its own batch (or the item, when not batch-tracked), any bin, available or held
                 $need = (float) $run['actual_qty'];
@@ -254,7 +254,7 @@ final class Production
                     $w .= ' AND s.lot_id = ?';
                     $b[] = $run['lot_id'];
                 }
-                $rows = Db::rows("SELECT s.* FROM {stock} s WHERE $w ORDER BY s.bin_id = ? DESC, s.id FOR UPDATE", array_merge($b, [$run['output_bin_id']]));
+                $rows = Db::rows("SELECT s.* FROM {stock} s WHERE s.tenant_id = {tid} AND $w ORDER BY s.bin_id = ? DESC, s.id FOR UPDATE", array_merge($b, [$run['output_bin_id']]));
                 $free = array_sum(array_map(static fn ($r) => (float) $r['qty'] - (float) $r['qty_allocated'], $rows));
                 if ($need - $free > Ledger::EPS) {
                     throw new BizException('Only ' . round($free, 3) . ' of the ' . (float) $run['actual_qty'] . ' made is still free in this warehouse (the rest was shipped, moved out or reserved). The run cannot be voided.');
@@ -269,12 +269,12 @@ final class Production
                 }
                 $wrow = Warehouses::get($wh);
                 foreach ($inputs as $i) {
-                    $bin = Db::row('SELECT * FROM {bins} WHERE id = ?', [$i['bin_id']]);
+                    $bin = Db::row('SELECT * FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$i['bin_id']]);
                     Ledger::add(['warehouse_id' => $wh, 'bin_id' => $bin && $bin['status'] === 'active' ? (int) $bin['id'] : (int) $wrow['production_bin_id'], 'item_id' => (int) $i['item_id'],
                         'lot_id' => $i['lot_id'], 'serial_id' => $i['serial_id'], 'qty' => (float) $i['qty'], 'unit_cost' => round((float) $i['value'] / (float) $i['qty'], 4),
                         'type' => 'production_void', 'doc_type' => 'production', 'doc_id' => $runId, 'note' => 'Void: ' . $reason]);
                 }
-                Db::exec("UPDATE {production_runs} SET status = 'voided', voided_by = ?, voided_at = ?, void_reason = ? WHERE id = ?", [Auth::id(), Db::now(), mb_substr($reason, 0, 255), $runId]);
+                Db::exec("UPDATE {production_runs} SET status = 'voided', voided_by = ?, voided_at = ?, void_reason = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), mb_substr($reason, 0, 255), $runId]);
                 Audit::log('production.void', 'production_run', $runId, ['status' => 'posted'], ['status' => 'voided'], 'success', $reason);
                 return $runId;
             });
@@ -285,12 +285,12 @@ final class Production
     {
         $r = Db::row('SELECT p.*, r.code recipe_code, r.name recipe_name, i.sku, i.name item_name, i.uom, i.decimals, l.lot_no, l.expiry_date, w.code wh_code, b.code bin_code, u.name posted_name
                         FROM {production_runs} p JOIN {recipes} r ON r.id = p.recipe_id JOIN {items} i ON i.id = p.output_item_id JOIN {warehouses} w ON w.id = p.warehouse_id
-                        JOIN {bins} b ON b.id = p.output_bin_id LEFT JOIN {lots} l ON l.id = p.lot_id LEFT JOIN {users} u ON u.id = p.posted_by WHERE p.id = ?', [$id]);
+                        JOIN {bins} b ON b.id = p.output_bin_id LEFT JOIN {lots} l ON l.id = p.lot_id LEFT JOIN {users} u ON u.id = p.posted_by WHERE p.tenant_id = {tid} AND p.id = ?', [$id]);
         if (! $r) {
             throw new BizException('Unknown run.');
         }
         $r['inputs'] = Db::rows('SELECT pi.*, i.sku, i.name, i.uom, i.decimals, l.lot_no, l.expiry_date, s.serial_no, b.code bin_code FROM {production_inputs} pi JOIN {items} i ON i.id = pi.item_id
-                                   LEFT JOIN {lots} l ON l.id = pi.lot_id LEFT JOIN {serials} s ON s.id = pi.serial_id LEFT JOIN {bins} b ON b.id = pi.bin_id WHERE pi.run_id = ? ORDER BY pi.id', [$id]);
+                                   LEFT JOIN {lots} l ON l.id = pi.lot_id LEFT JOIN {serials} s ON s.id = pi.serial_id LEFT JOIN {bins} b ON b.id = pi.bin_id WHERE pi.tenant_id = {tid} AND pi.run_id = ? ORDER BY pi.id', [$id]);
         return $r;
     }
 }

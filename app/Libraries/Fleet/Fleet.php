@@ -55,11 +55,11 @@ final class Fleet
             $row[$f] = Lots::date($d[$f] ?? '');
         }
         return Db::atomic(static function () use ($row, $id, $reg, $d) {
-            if (Db::value('SELECT id FROM {vehicles} WHERE reg_no = ? AND id <> ?', [$reg, $id ?? 0])) {
+            if (Db::value('SELECT id FROM {vehicles} WHERE tenant_id = {tid} AND reg_no = ? AND id <> ?', [$reg, $id ?? 0])) {
                 throw new BizException('Vehicle ' . $reg . ' is already registered.');
             }
             if ($id) {
-                $old = Db::row('SELECT * FROM {vehicles} WHERE id = ? FOR UPDATE', [$id]);
+                $old = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
                 if (! $old) {
                     throw new BizException('Unknown vehicle.');
                 }
@@ -69,7 +69,7 @@ final class Fleet
                     $row['odometer_km'] = max($row['odometer_km'], (int) $old['odometer_km']);
                 }
                 $row['status'] = $status;
-                Db::exec('UPDATE {vehicles} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE id = ?', array_merge(array_values($row), [$id]));
+                Db::exec('UPDATE {vehicles} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($row), [$id]));
                 Audit::log('vehicle.update', 'vehicle', $id, array_intersect_key($old, $row), $row);
             } else {
                 $id = Db::insert('vehicles', $row + ['status' => 'available', 'created_at' => Db::now()]);
@@ -92,7 +92,7 @@ final class Fleet
             'notes' => trim((string) ($d['notes'] ?? '')) ?: null];
         return Db::atomic(static function () use ($row, $id) {
             if ($id) {
-                Db::exec('UPDATE {drivers} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE id = ?', array_merge(array_values($row), [$id]));
+                Db::exec('UPDATE {drivers} SET ' . implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row))) . ' WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($row), [$id]));
                 Audit::log('driver.update', 'driver', $id, null, $row);
             } else {
                 $id = Db::insert('drivers', $row + ['created_at' => Db::now()]);
@@ -111,7 +111,7 @@ final class Fleet
             throw new BizException('Choose what is being recorded.');
         }
         return Db::atomic(static function () use ($vehicleId, $d, $kind) {
-            $v = Db::row('SELECT * FROM {vehicles} WHERE id = ? FOR UPDATE', [$vehicleId]);
+            $v = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$vehicleId]);
             if (! $v) {
                 throw new BizException('Unknown vehicle.');
             }
@@ -125,10 +125,10 @@ final class Fleet
                 'trip_id' => ($d['trip_id'] ?? '') !== '' ? (int) $d['trip_id'] : null, 'note' => trim((string) ($d['note'] ?? '')) ?: null, 'user_id' => Auth::id(), 'created_at' => Db::now(),
             ]);
             if ($odo !== null) {
-                Db::exec('UPDATE {vehicles} SET odometer_km = ? WHERE id = ?', [$odo, $vehicleId]);
+                Db::exec('UPDATE {vehicles} SET odometer_km = ? WHERE tenant_id = {tid} AND id = ?', [$odo, $vehicleId]);
             }
             if ($kind === 'service') {
-                Db::exec('UPDATE {vehicles} SET next_service_date = COALESCE(?, next_service_date), next_service_km = COALESCE(?, next_service_km) WHERE id = ?',
+                Db::exec('UPDATE {vehicles} SET next_service_date = COALESCE(?, next_service_date), next_service_km = COALESCE(?, next_service_km) WHERE tenant_id = {tid} AND id = ?',
                     [Lots::date($d['next_service_date'] ?? ''), ($d['next_service_km'] ?? '') !== '' ? (int) $d['next_service_km'] : null, $vehicleId]);
             }
             Audit::log('vehicle.' . $kind, 'vehicle', $vehicleId, null, ['log' => $id, 'odometer' => $odo]);
@@ -140,8 +140,8 @@ final class Fleet
     public static function blockers(int $vehicleId, int $driverId, string $date): array
     {
         $out = [];
-        $v   = Db::row('SELECT * FROM {vehicles} WHERE id = ?', [$vehicleId]);
-        $dr  = Db::row('SELECT * FROM {drivers} WHERE id = ?', [$driverId]);
+        $v   = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ?', [$vehicleId]);
+        $dr  = Db::row('SELECT * FROM {drivers} WHERE tenant_id = {tid} AND id = ?', [$driverId]);
         if (! $v) {
             return ['Unknown vehicle.'];
         }
@@ -177,7 +177,7 @@ final class Fleet
             if ($b = self::blockers($vid, $did, $date)) {
                 throw new BizException(implode(' ', $b));
             }
-            if (! Db::value('SELECT 1 FROM {warehouses} WHERE id = ? AND active = 1', [$wh])) {
+            if (! Db::value('SELECT 1 FROM {warehouses} WHERE tenant_id = {tid} AND id = ? AND active = 1', [$wh])) {
                 throw new BizException('Choose the warehouse the trip leaves from.');
             }
             $id = Db::insert('trips', ['number' => Numbers::next('trip'), 'warehouse_id' => $wh, 'vehicle_id' => $vid, 'driver_id' => $did, 'status' => 'planned',
@@ -198,7 +198,7 @@ final class Fleet
     public static function addStop(int $tripId, string $kind, int $docId, ?int $seq = null): void
     {
         Access::require('fleet.manage');
-        $trip = Db::row('SELECT * FROM {trips} WHERE id = ? FOR UPDATE', [$tripId]);
+        $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
         if (! $trip || $trip['status'] !== 'planned') {
             throw new BizException('Stops can only be added to a planned trip.');
         }
@@ -215,40 +215,40 @@ final class Fleet
         } else {
             throw new BizException('Unknown stop.');
         }
-        $busy = Db::value("SELECT t.number FROM {trip_stops} ts JOIN {trips} t ON t.id = ts.trip_id WHERE ts.kind = ? AND ts.doc_id = ? AND t.status IN ('planned','on_road') AND ts.status = 'pending'", [$kind, $docId]);
+        $busy = Db::value("SELECT t.number FROM {trip_stops} ts JOIN {trips} t ON t.id = ts.trip_id WHERE ts.tenant_id = {tid} AND ts.kind = ? AND ts.doc_id = ? AND t.status IN ('planned','on_road') AND ts.status = 'pending'", [$kind, $docId]);
         if ($busy) {
             throw new BizException($s['number'] . ' is already on trip ' . $busy . '.');
         }
-        Db::insert('trip_stops', ['trip_id' => $tripId, 'seq' => $seq ?? ((int) Db::value('SELECT COALESCE(MAX(seq), 0) FROM {trip_stops} WHERE trip_id = ?', [$tripId]) + 1), 'kind' => $kind, 'doc_id' => $docId]);
-        Db::exec('UPDATE {' . ($kind === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = ? WHERE id = ?', [$tripId, $docId]);
+        Db::insert('trip_stops', ['trip_id' => $tripId, 'seq' => $seq ?? ((int) Db::value('SELECT COALESCE(MAX(seq), 0) FROM {trip_stops} WHERE tenant_id = {tid} AND trip_id = ?', [$tripId]) + 1), 'kind' => $kind, 'doc_id' => $docId]);
+        Db::exec('UPDATE {' . ($kind === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = ? WHERE tenant_id = {tid} AND id = ?', [$tripId, $docId]);
     }
 
     public static function removeStop(int $stopId): void
     {
         Access::require('fleet.manage');
         Db::atomic(static function () use ($stopId) {
-            $st = Db::row('SELECT ts.*, t.status trip_status FROM {trip_stops} ts JOIN {trips} t ON t.id = ts.trip_id WHERE ts.id = ? FOR UPDATE', [$stopId]);
+            $st = Db::row('SELECT ts.*, t.status trip_status FROM {trip_stops} ts JOIN {trips} t ON t.id = ts.trip_id WHERE ts.tenant_id = {tid} AND ts.id = ? FOR UPDATE', [$stopId]);
             if (! $st || $st['trip_status'] !== 'planned') {
                 throw new BizException('Stops can only be removed from a planned trip.');
             }
-            Db::exec('DELETE FROM {trip_stops} WHERE id = ?', [$stopId]);
-            Db::exec('UPDATE {' . ($st['kind'] === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = NULL WHERE id = ?', [$st['doc_id']]);
+            Db::exec('DELETE FROM {trip_stops} WHERE tenant_id = {tid} AND id = ?', [$stopId]);
+            Db::exec('UPDATE {' . ($st['kind'] === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = NULL WHERE tenant_id = {tid} AND id = ?', [$st['doc_id']]);
         });
     }
 
     /** Weight on the trip (shipments' recorded or computed weight, transfers from item weights) against capacity. */
     public static function load(int $tripId): float
     {
-        $kg = (float) Db::value("SELECT COALESCE(SUM(COALESCE(s.weight_kg, (SELECT SUM(sl.qty * COALESCE(i.weight_kg, 0)) FROM {shipment_lines} sl JOIN {items} i ON i.id = sl.item_id WHERE sl.shipment_id = s.id))), 0)
-                                   FROM {trip_stops} ts JOIN {shipments} s ON s.id = ts.doc_id WHERE ts.trip_id = ? AND ts.kind = 'shipment'", [$tripId]);
+        $kg = (float) Db::value("SELECT COALESCE(SUM(COALESCE(s.weight_kg, (SELECT SUM(sl.qty * COALESCE(i.weight_kg, 0)) FROM {shipment_lines} sl JOIN {items} i ON i.id = sl.item_id WHERE sl.tenant_id = {tid} AND sl.shipment_id = s.id))), 0)
+                                   FROM {trip_stops} ts JOIN {shipments} s ON s.id = ts.doc_id WHERE ts.tenant_id = {tid} AND ts.trip_id = ? AND ts.kind = 'shipment'", [$tripId]);
         $kg += (float) Db::value("SELECT COALESCE(SUM(tl.qty * COALESCE(i.weight_kg, 0)), 0) FROM {trip_stops} ts JOIN {transfer_lines} tl ON tl.transfer_id = ts.doc_id JOIN {items} i ON i.id = tl.item_id
-                                   WHERE ts.trip_id = ? AND ts.kind = 'transfer'", [$tripId]);
+                                   WHERE ts.tenant_id = {tid} AND ts.trip_id = ? AND ts.kind = 'transfer'", [$tripId]);
         return round($kg, 1);
     }
 
     private static function checkLoad(int $tripId): void
     {
-        $cap = Db::value('SELECT v.capacity_kg FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id WHERE t.id = ?', [$tripId]);
+        $cap = Db::value('SELECT v.capacity_kg FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id WHERE t.tenant_id = {tid} AND t.id = ?', [$tripId]);
         $kg  = self::load($tripId);
         if ($cap !== null && (float) $cap > 0 && $kg > (float) $cap) {
             throw new BizException('The load (' . number_format($kg, 1) . ' kg) is more than the vehicle carries (' . number_format((float) $cap, 1) . ' kg).');
@@ -263,7 +263,7 @@ final class Fleet
     {
         Db::atomic(static function () use ($tripId, $odometer, $token) {
             Db::once($token, Auth::id(), static function () use ($tripId, $odometer) {
-                $trip = Db::row('SELECT * FROM {trips} WHERE id = ? FOR UPDATE', [$tripId]);
+                $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
                 if (! $trip) {
                     throw new BizException('Unknown trip.');
                 }
@@ -274,14 +274,14 @@ final class Fleet
                 if ($b = self::blockers((int) $trip['vehicle_id'], (int) $trip['driver_id'], date('Y-m-d'))) {
                     throw new BizException(implode(' ', $b));
                 }
-                $v = Db::row('SELECT * FROM {vehicles} WHERE id = ? FOR UPDATE', [$trip['vehicle_id']]);
+                $v = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$trip['vehicle_id']]);
                 if ($v['status'] !== 'available') {
                     throw new BizException($v['reg_no'] . ' is not available (' . str_replace('_', ' ', $v['status']) . ').');
                 }
                 if ($odometer < (int) $v['odometer_km']) {
                     throw new BizException('The odometer reading is lower than the last one recorded (' . number_format((int) $v['odometer_km']) . ' km).');
                 }
-                $stops = Db::rows('SELECT * FROM {trip_stops} WHERE trip_id = ? ORDER BY seq', [$tripId]);
+                $stops = Db::rows('SELECT * FROM {trip_stops} WHERE tenant_id = {tid} AND trip_id = ? ORDER BY seq', [$tripId]);
                 if (! $stops) {
                     throw new BizException('The trip carries nothing.');
                 }
@@ -301,8 +301,8 @@ final class Fleet
                         Transfers::dispatch((int) $s['doc_id'], null, true);
                     }
                 }
-                Db::exec("UPDATE {trips} SET status = 'on_road', departed_at = ?, odometer_out = ? WHERE id = ?", [Db::now(), $odometer, $tripId]);
-                Db::exec("UPDATE {vehicles} SET status = 'on_trip', odometer_km = ? WHERE id = ?", [$odometer, $trip['vehicle_id']]);
+                Db::exec("UPDATE {trips} SET status = 'on_road', departed_at = ?, odometer_out = ? WHERE tenant_id = {tid} AND id = ?", [Db::now(), $odometer, $tripId]);
+                Db::exec("UPDATE {vehicles} SET status = 'on_trip', odometer_km = ? WHERE tenant_id = {tid} AND id = ?", [$odometer, $trip['vehicle_id']]);
                 Audit::log('trip.depart', 'trip', $tripId, null, ['odometer' => $odometer, 'stops' => count($stops)]);
                 return $tripId;
             });
@@ -314,20 +314,20 @@ final class Fleet
     {
         Access::require('fleet.manage');
         Db::atomic(static function () use ($tripId, $odometer, $fuel) {
-            $trip = Db::row('SELECT * FROM {trips} WHERE id = ? FOR UPDATE', [$tripId]);
+            $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
             if (! $trip || $trip['status'] !== 'on_road') {
                 throw new BizException('Only a trip on the road can be completed.');
             }
-            $open = Db::value("SELECT s.number FROM {trip_stops} ts JOIN {shipments} s ON s.id = ts.doc_id WHERE ts.trip_id = ? AND ts.kind = 'shipment' AND ts.status = 'pending' LIMIT 1", [$tripId]);
+            $open = Db::value("SELECT s.number FROM {trip_stops} ts JOIN {shipments} s ON s.id = ts.doc_id WHERE ts.tenant_id = {tid} AND ts.trip_id = ? AND ts.kind = 'shipment' AND ts.status = 'pending' LIMIT 1", [$tripId]);
             if ($open) {
                 throw new BizException('Record the delivery (or failed delivery) of ' . $open . ' first.');
             }
             if ($odometer < (int) $trip['odometer_out']) {
                 throw new BizException('The odometer reading in is lower than when the trip left (' . number_format((int) $trip['odometer_out']) . ' km).');
             }
-            Db::exec("UPDATE {trip_stops} SET status = 'done', done_at = ? WHERE trip_id = ? AND kind = 'transfer' AND status = 'pending'", [Db::now(), $tripId]);
-            Db::exec("UPDATE {trips} SET status = 'completed', returned_at = ?, odometer_in = ? WHERE id = ?", [Db::now(), $odometer, $tripId]);
-            Db::exec("UPDATE {vehicles} SET status = 'available', odometer_km = ? WHERE id = ?", [$odometer, $trip['vehicle_id']]);
+            Db::exec("UPDATE {trip_stops} SET status = 'done', done_at = ? WHERE tenant_id = {tid} AND trip_id = ? AND kind = 'transfer' AND status = 'pending'", [Db::now(), $tripId]);
+            Db::exec("UPDATE {trips} SET status = 'completed', returned_at = ?, odometer_in = ? WHERE tenant_id = {tid} AND id = ?", [Db::now(), $odometer, $tripId]);
+            Db::exec("UPDATE {vehicles} SET status = 'available', odometer_km = ? WHERE tenant_id = {tid} AND id = ?", [$odometer, $trip['vehicle_id']]);
             if (! empty($fuel['litres']) || ! empty($fuel['cost'])) {
                 self::log((int) $trip['vehicle_id'], ['kind' => 'fuel', 'litres' => $fuel['litres'] ?? null, 'cost' => $fuel['cost'] ?? 0, 'odometer_km' => $odometer, 'trip_id' => $tripId]);
             }
@@ -339,15 +339,15 @@ final class Fleet
     {
         Access::require('fleet.manage');
         Db::atomic(static function () use ($tripId, $why) {
-            $trip = Db::row('SELECT * FROM {trips} WHERE id = ? FOR UPDATE', [$tripId]);
+            $trip = Db::row('SELECT * FROM {trips} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$tripId]);
             if (! $trip || $trip['status'] !== 'planned') {
                 throw new BizException('Only a planned trip can be cancelled.');
             }
-            foreach (Db::rows('SELECT * FROM {trip_stops} WHERE trip_id = ?', [$tripId]) as $s) {
-                Db::exec('UPDATE {' . ($s['kind'] === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = NULL WHERE id = ? AND trip_id = ?', [$s['doc_id'], $tripId]);
+            foreach (Db::rows('SELECT * FROM {trip_stops} WHERE tenant_id = {tid} AND trip_id = ?', [$tripId]) as $s) {
+                Db::exec('UPDATE {' . ($s['kind'] === 'shipment' ? 'shipments' : 'transfers') . '} SET trip_id = NULL WHERE tenant_id = {tid} AND id = ? AND trip_id = ?', [$s['doc_id'], $tripId]);
             }
-            Db::exec('DELETE FROM {trip_stops} WHERE trip_id = ?', [$tripId]);
-            Db::exec("UPDATE {trips} SET status = 'cancelled', route_note = CONCAT(COALESCE(route_note, ''), ?) WHERE id = ?", [' (cancelled: ' . mb_substr($why, 0, 100) . ')', $tripId]);
+            Db::exec('DELETE FROM {trip_stops} WHERE tenant_id = {tid} AND trip_id = ?', [$tripId]);
+            Db::exec("UPDATE {trips} SET status = 'cancelled', route_note = CONCAT(COALESCE(route_note, ''), ?) WHERE tenant_id = {tid} AND id = ?", [' (cancelled: ' . mb_substr($why, 0, 100) . ')', $tripId]);
             Audit::log('trip.cancel', 'trip', $tripId, null, null, 'success', $why);
         });
     }
@@ -358,7 +358,7 @@ final class Fleet
         $days ??= (int) Settings::get('fleet_warn_days');
         $until = date('Y-m-d', strtotime('+' . $days . ' days'));
         $out   = [];
-        foreach (Db::rows("SELECT * FROM {vehicles} WHERE status <> 'retired'") as $v) {
+        foreach (Db::rows("SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND status <> 'retired'") as $v) {
             foreach (['insurance_expiry' => 'Insurance', 'fitness_expiry' => 'Fitness certificate', 'road_tax_expiry' => 'Road tax', 'next_service_date' => 'Service due'] as $f => $label) {
                 if ($v[$f] && $v[$f] <= $until) {
                     $out[] = ['what' => $v['reg_no'], 'label' => $label, 'date' => $v[$f], 'link' => '/fleet/vehicles/' . $v['id'], 'overdue' => $v[$f] < date('Y-m-d')];
@@ -368,7 +368,7 @@ final class Fleet
                 $out[] = ['what' => $v['reg_no'], 'label' => 'Service due at ' . number_format((int) $v['next_service_km']) . ' km (now ' . number_format((int) $v['odometer_km']) . ')', 'date' => null, 'link' => '/fleet/vehicles/' . $v['id'], 'overdue' => (int) $v['odometer_km'] >= (int) $v['next_service_km']];
             }
         }
-        foreach (Db::rows("SELECT * FROM {drivers} WHERE status = 'active'") as $dr) {
+        foreach (Db::rows("SELECT * FROM {drivers} WHERE tenant_id = {tid} AND status = 'active'") as $dr) {
             if (! $dr['licence_expiry'] || $dr['licence_expiry'] <= $until) {
                 $out[] = ['what' => $dr['name'], 'label' => 'Driving licence', 'date' => $dr['licence_expiry'], 'link' => '/fleet/drivers/' . $dr['id'], 'overdue' => ! $dr['licence_expiry'] || $dr['licence_expiry'] < date('Y-m-d')];
             }

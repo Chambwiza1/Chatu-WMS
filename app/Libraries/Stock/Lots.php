@@ -29,13 +29,13 @@ final class Lots
         if ($expiry && $mfg && $mfg > $expiry) {
             throw new BizException('Batch ' . $lotNo . ': the manufacture date is after the expiry date.');
         }
-        $lot = Db::row('SELECT * FROM {lots} WHERE item_id = ? AND lot_no = ? FOR UPDATE', [$item['id'], $lotNo]);
+        $lot = Db::row('SELECT * FROM {lots} WHERE tenant_id = {tid} AND item_id = ? AND lot_no = ? FOR UPDATE', [$item['id'], $lotNo]);
         if ($lot) {
             if ($expiry && $lot['expiry_date'] && $lot['expiry_date'] !== $expiry) {
                 throw new BizException('Batch ' . $lotNo . ' of ' . $item['sku'] . ' is already recorded with expiry ' . $lot['expiry_date'] . ', not ' . $expiry . '.');
             }
             if ($expiry && ! $lot['expiry_date']) {
-                Db::exec('UPDATE {lots} SET expiry_date = ? WHERE id = ?', [$expiry, $lot['id']]);
+                Db::exec('UPDATE {lots} SET expiry_date = ? WHERE tenant_id = {tid} AND id = ?', [$expiry, $lot['id']]);
             }
             return (int) $lot['id'];
         }
@@ -69,12 +69,12 @@ final class Lots
         if ($serialNo === '' || mb_strlen($serialNo) > 80) {
             throw new BizException($item['sku'] . ': serial numbers are 1 to 80 characters.');
         }
-        $s = Db::row('SELECT * FROM {serials} WHERE item_id = ? AND serial_no = ? FOR UPDATE', [$item['id'], $serialNo]);
+        $s = Db::row('SELECT * FROM {serials} WHERE tenant_id = {tid} AND item_id = ? AND serial_no = ? FOR UPDATE', [$item['id'], $serialNo]);
         if ($s) {
             if (in_array($s['status'], ['in_stock', 'in_transit'], true)) {
                 throw new BizException('Serial ' . $serialNo . ' of ' . $item['sku'] . ' is already ' . str_replace('_', ' ', $s['status']) . '.');
             }
-            Db::exec('UPDATE {serials} SET lot_id = COALESCE(?, lot_id) WHERE id = ?', [$lotId, $s['id']]);
+            Db::exec('UPDATE {serials} SET lot_id = COALESCE(?, lot_id) WHERE tenant_id = {tid} AND id = ?', [$lotId, $s['id']]);
             return (int) $s['id'];
         }
         return Db::insert('serials', ['item_id' => $item['id'], 'serial_no' => $serialNo, 'lot_id' => $lotId, 'status' => 'in_transit', 'created_at' => Db::now()]);
@@ -101,11 +101,11 @@ final class Lots
             throw new BizException('Say why the batch is held or recalled.');
         }
         Db::atomic(static function () use ($lotId, $status, $reason) {
-            $lot = Db::row('SELECT * FROM {lots} WHERE id = ? FOR UPDATE', [$lotId]);
+            $lot = Db::row('SELECT * FROM {lots} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$lotId]);
             if (! $lot) {
                 throw new BizException('Unknown batch.');
             }
-            Db::exec('UPDATE {lots} SET status = ?, hold_reason = ? WHERE id = ?', [$status, $status === 'active' ? null : mb_substr($reason, 0, 255), $lotId]);
+            Db::exec('UPDATE {lots} SET status = ?, hold_reason = ? WHERE tenant_id = {tid} AND id = ?', [$status, $status === 'active' ? null : mb_substr($reason, 0, 255), $lotId]);
             Audit::log('lot.' . $status, 'lot', $lotId, ['status' => $lot['status']], ['status' => $status, 'reason' => $reason]);
             if ($status !== 'active') {
                 // stock of a held batch cannot be picked; existing reservations stay, but are reported on the dashboard

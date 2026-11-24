@@ -27,7 +27,7 @@ final class Transfers
 {
     public static function get(int $id, bool $lock = false): array
     {
-        $t = Db::row('SELECT * FROM {transfers} WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
+        $t = Db::row('SELECT * FROM {transfers} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $t) {
             throw new BizException('Unknown transfer.');
         }
@@ -36,7 +36,7 @@ final class Transfers
 
     public static function lines(int $id): array
     {
-        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking FROM {transfer_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.transfer_id = ? ORDER BY l.id', [$id]);
+        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking FROM {transfer_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.transfer_id = ? ORDER BY l.id', [$id]);
     }
 
     /** $d: from_warehouse_id, to_warehouse_id, needed_by, notes, lines [{item_id, qty}]. */
@@ -96,7 +96,7 @@ final class Transfers
             foreach ($lines as $l) {
                 Alloc::reserve('transfer', $id, (int) $l['id'], (int) $tr['from_warehouse_id'], (int) $l['item_id'], (float) $l['qty']);
             }
-            Db::exec("UPDATE {transfers} SET status = 'allocated' WHERE id = ?", [$id]);
+            Db::exec("UPDATE {transfers} SET status = 'allocated' WHERE tenant_id = {tid} AND id = ?", [$id]);
             Audit::log('transfer.allocate', 'transfer', $id);
         });
     }
@@ -111,7 +111,7 @@ final class Transfers
             }
             Ledger::lock(array_map(static fn ($l) => [(int) $tr['from_warehouse_id'], (int) $l['item_id']], self::lines($id)));
             Alloc::release('transfer', $id);
-            Db::exec("UPDATE {transfers} SET status = 'draft' WHERE id = ?", [$id]);
+            Db::exec("UPDATE {transfers} SET status = 'draft' WHERE tenant_id = {tid} AND id = ?", [$id]);
             Audit::log('transfer.unallocate', 'transfer', $id);
         });
     }
@@ -128,8 +128,8 @@ final class Transfers
                 Ledger::lock(array_map(static fn ($l) => [(int) $tr['from_warehouse_id'], (int) $l['item_id']], self::lines($id)));
                 Alloc::release('transfer', $id);
             }
-            Db::exec("UPDATE {transfers} SET status = 'cancelled', closed_at = ?, notes = CONCAT(COALESCE(notes, ''), ?) WHERE id = ?", [Db::now(), "\nCancelled: " . mb_substr($why, 0, 200), $id]);
-            Db::exec("DELETE FROM {trip_stops} WHERE kind = 'transfer' AND doc_id = ? AND status = 'pending'", [$id]);
+            Db::exec("UPDATE {transfers} SET status = 'cancelled', closed_at = ?, notes = CONCAT(COALESCE(notes, ''), ?) WHERE tenant_id = {tid} AND id = ?", [Db::now(), "\nCancelled: " . mb_substr($why, 0, 200), $id]);
+            Db::exec("DELETE FROM {trip_stops} WHERE tenant_id = {tid} AND kind = 'transfer' AND doc_id = ? AND status = 'pending'", [$id]);
             Audit::log('transfer.cancel', 'transfer', $id, ['status' => $tr['status']], ['status' => 'cancelled'], 'success', $why);
         });
     }
@@ -161,9 +161,9 @@ final class Transfers
                         $sent  += (float) $a['qty'];
                         $value += $r['value'];
                     }
-                    Db::exec('UPDATE {transfer_lines} SET qty_dispatched = ?, value_sent = ? WHERE id = ?', [Ledger::q($sent), round($value, 2), $l['id']]);
+                    Db::exec('UPDATE {transfer_lines} SET qty_dispatched = ?, value_sent = ? WHERE tenant_id = {tid} AND id = ?', [Ledger::q($sent), round($value, 2), $l['id']]);
                 }
-                Db::exec("UPDATE {transfers} SET status = 'in_transit', dispatched_by = ?, dispatched_at = ? WHERE id = ?", [Auth::id(), Db::now(), $id]);
+                Db::exec("UPDATE {transfers} SET status = 'in_transit', dispatched_by = ?, dispatched_at = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), $id]);
                 Notify::holders('transfer.receive', (int) $tr['to_warehouse_id'], 'transfer_coming', 'Transfer ' . $tr['number'] . ' is on its way', 'From ' . Warehouses::get($wh)['code'] . '. Receive it when it arrives.', '/transfers/' . $id);
                 Audit::log('transfer.dispatch', 'transfer', $id);
                 return $id;
@@ -202,7 +202,7 @@ final class Transfers
                 if (! $rows && ! $final) {
                     throw new BizException('Nothing received. Give quantities, or mark the receipt as final to record the rest as missing.');
                 }
-                $transit = Db::rows('SELECT * FROM {transit} WHERE transfer_id = ? ORDER BY id FOR UPDATE', [$id]);
+                $transit = Db::rows('SELECT * FROM {transit} WHERE tenant_id = {tid} AND transfer_id = ? ORDER BY id FOR UPDATE', [$id]);
                 Ledger::lock(array_map(static fn ($x) => [$wh, (int) $x['item_id']], $transit));
                 $rcpt = Db::insert('transfer_receipts', ['transfer_id' => $id, 'is_final' => $final ? 1 : 0, 'notes' => trim((string) ($d['notes'] ?? '')) ?: null, 'received_by' => Auth::id(), 'received_at' => Db::now()]);
                 $byId = [];
@@ -227,18 +227,18 @@ final class Transfers
                         Ledger::add(['warehouse_id' => $wh, 'bin_id' => $b, 'item_id' => $item['id'], 'lot_id' => $x['lot_id'], 'serial_id' => $x['serial_id'], 'status' => $status,
                             'qty' => $q, 'type' => $type, 'doc_type' => 'transfer', 'doc_id' => $id, 'doc_line_id' => (int) $x['transfer_line_id'], 'layers' => $layers, 'note' => 'Receipt ' . $rcpt]);
                     }
-                    Db::exec('UPDATE {transit} SET qty_open = qty_open - ? WHERE id = ?', [Ledger::q($g + $dm + $rj), $tid]);
-                    Db::exec('UPDATE {transfer_lines} SET qty_received = qty_received + ?, qty_damaged = qty_damaged + ?, qty_rejected = qty_rejected + ? WHERE id = ?', [$g, $dm, $rj, $x['transfer_line_id']]);
+                    Db::exec('UPDATE {transit} SET qty_open = qty_open - ? WHERE tenant_id = {tid} AND id = ?', [Ledger::q($g + $dm + $rj), $tid]);
+                    Db::exec('UPDATE {transfer_lines} SET qty_received = qty_received + ?, qty_damaged = qty_damaged + ?, qty_rejected = qty_rejected + ? WHERE tenant_id = {tid} AND id = ?', [$g, $dm, $rj, $x['transfer_line_id']]);
                 }
                 $missing = 0.0;
                 if ($final) {
-                    foreach (Db::rows('SELECT * FROM {transit} WHERE transfer_id = ? AND qty_open > 0 FOR UPDATE', [$id]) as $x) {
+                    foreach (Db::rows('SELECT * FROM {transit} WHERE tenant_id = {tid} AND transfer_id = ? AND qty_open > 0 FOR UPDATE', [$id]) as $x) {
                         $layers = self::takeCost((int) $x['transfer_line_id'], (float) $x['qty_open']);
                         $val    = Valuation::valueOf($layers);
-                        Db::exec('UPDATE {transfer_lines} SET qty_missing = qty_missing + ?, value_missing = value_missing + ? WHERE id = ?', [$x['qty_open'], $val, $x['transfer_line_id']]);
-                        Db::exec('UPDATE {transit} SET qty_open = 0 WHERE id = ?', [$x['id']]);
+                        Db::exec('UPDATE {transfer_lines} SET qty_missing = qty_missing + ?, value_missing = value_missing + ? WHERE tenant_id = {tid} AND id = ?', [$x['qty_open'], $val, $x['transfer_line_id']]);
+                        Db::exec('UPDATE {transit} SET qty_open = 0 WHERE tenant_id = {tid} AND id = ?', [$x['id']]);
                         if ($x['serial_id']) {
-                            Db::exec("UPDATE {serials} SET status = 'lost', last_doc = ? WHERE id = ?", ['transfer:' . $id, $x['serial_id']]);
+                            Db::exec("UPDATE {serials} SET status = 'lost', last_doc = ? WHERE tenant_id = {tid} AND id = ?", ['transfer:' . $id, $x['serial_id']]);
                         }
                         $missing += (float) $x['qty_open'];
                     }
@@ -246,9 +246,9 @@ final class Transfers
                         throw new BizException('Units are missing: say what happened in the notes before closing the transfer.');
                     }
                 }
-                $open   = (float) Db::value('SELECT COALESCE(SUM(qty_open), 0) FROM {transit} WHERE transfer_id = ?', [$id]);
+                $open   = (float) Db::value('SELECT COALESCE(SUM(qty_open), 0) FROM {transit} WHERE tenant_id = {tid} AND transfer_id = ?', [$id]);
                 $status = $open <= Ledger::EPS ? 'received' : 'partly_received';
-                Db::exec('UPDATE {transfers} SET status = ?, closed_at = ? WHERE id = ?', [$status, $status === 'received' ? Db::now() : null, $id]);
+                Db::exec('UPDATE {transfers} SET status = ?, closed_at = ? WHERE tenant_id = {tid} AND id = ?', [$status, $status === 'received' ? Db::now() : null, $id]);
                 if ($missing > Ledger::EPS) {
                     Notify::holders('stock.approve', null, 'transfer_loss', 'Transfer ' . $tr['number'] . ' arrived short', 'Missing units were written off at the cost they left with.', '/transfers/' . $id, Auth::id());
                 }
@@ -263,12 +263,12 @@ final class Transfers
     {
         $need = Ledger::q($qty);
         $out  = [];
-        foreach (Db::rows('SELECT * FROM {transit_costs} WHERE transfer_line_id = ? AND qty_open > 0 ORDER BY received_at, id FOR UPDATE', [$lineId]) as $c) {
+        foreach (Db::rows('SELECT * FROM {transit_costs} WHERE tenant_id = {tid} AND transfer_line_id = ? AND qty_open > 0 ORDER BY received_at, id FOR UPDATE', [$lineId]) as $c) {
             if ($need <= Ledger::EPS) {
                 break;
             }
             $use = Ledger::q(min($need, (float) $c['qty_open']));
-            Db::exec('UPDATE {transit_costs} SET qty_open = qty_open - ? WHERE id = ?', [$use, $c['id']]);
+            Db::exec('UPDATE {transit_costs} SET qty_open = qty_open - ? WHERE tenant_id = {tid} AND id = ?', [$use, $c['id']]);
             $out[] = [$use, (float) $c['unit_cost'], $c['received_at']];
             $need  = Ledger::q($need - $use);
         }
@@ -281,6 +281,6 @@ final class Transfers
     public static function transit(int $id): array
     {
         return Db::rows('SELECT t.*, i.sku, i.name, i.uom, i.decimals, l.lot_no, l.expiry_date, s.serial_no FROM {transit} t JOIN {items} i ON i.id = t.item_id
-                           LEFT JOIN {lots} l ON l.id = t.lot_id LEFT JOIN {serials} s ON s.id = t.serial_id WHERE t.transfer_id = ? ORDER BY t.transfer_line_id, t.id', [$id]);
+                           LEFT JOIN {lots} l ON l.id = t.lot_id LEFT JOIN {serials} s ON s.id = t.serial_id WHERE t.tenant_id = {tid} AND t.transfer_id = ? ORDER BY t.transfer_line_id, t.id', [$id]);
     }
 }

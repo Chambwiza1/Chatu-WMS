@@ -10,8 +10,8 @@ class Items extends BaseController
 {
     public function index()
     {
-        if (! Access::can('item.manage') && ! Access::can('stock.view')) {
-            return $this->need('item.manage');
+        if (! Access::can('item.view') && ! Access::can('stock.view')) {
+            return $this->need('item.view');
         }
         $q = trim((string) $this->request->getGet('q'));
         $w = '1=1';
@@ -24,20 +24,20 @@ class Items extends BaseController
             $w .= ' AND i.kind = ?';
             $b[] = $k;
         }
-        $rows = Db::rows("SELECT i.*, c.name category, (SELECT COALESCE(SUM(s.qty), 0) FROM {stock} s WHERE s.item_id = i.id) on_hand FROM {items} i LEFT JOIN {item_categories} c ON c.id = i.category_id WHERE $w ORDER BY i.active DESC, i.sku LIMIT 500", $b);
+        $rows = Db::rows("SELECT i.*, c.name category, (SELECT COALESCE(SUM(s.qty), 0) FROM {stock} s WHERE s.tenant_id = {tid} AND s.item_id = i.id) on_hand FROM {items} i LEFT JOIN {item_categories} c ON c.id = i.category_id WHERE i.tenant_id = {tid} AND $w ORDER BY i.active DESC, i.sku LIMIT 500", $b);
         return $this->render('items/index', ['rows' => $rows, 'q' => $q, 'kind' => $k], 'Items');
     }
 
     public function form(?int $id = null)
     {
-        if ($r = $this->need('item.manage')) {
+        if ($r = $this->need($id ? 'item.update' : 'item.create')) {
             return $r;
         }
-        $item = $id ? Db::row('SELECT * FROM {items} WHERE id = ?', [$id]) : null;
+        $item = $id ? Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND id = ?', [$id]) : null;
         if ($id && ! $item) {
             return $this->notFound('Item');
         }
-        $locked = $id && Db::value('SELECT 1 FROM {movements} WHERE item_id = ? LIMIT 1', [$id]);
+        $locked = $id && Db::value('SELECT 1 FROM {movements} WHERE tenant_id = {tid} AND item_id = ? LIMIT 1', [$id]);
         return $this->render('items/form', ['item' => $item, 'cats' => I::categories(), 'locked' => (bool) $locked, 'units' => $id ? I::units($id) : []], $item ? 'Edit ' . $item['sku'] : 'New item');
     }
 

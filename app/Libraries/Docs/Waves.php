@@ -20,7 +20,7 @@ final class Waves
     public static function get(int $id, bool $lock = false): array
     {
         $w = Db::row('SELECT v.*, w.code wh_code, w.name wh_name, u.name created_name, p.name picked_name FROM {pick_waves} v JOIN {warehouses} w ON w.id = v.warehouse_id
-                       LEFT JOIN {users} u ON u.id = v.created_by LEFT JOIN {users} p ON p.id = v.picked_by WHERE v.id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
+                       LEFT JOIN {users} u ON u.id = v.created_by LEFT JOIN {users} p ON p.id = v.picked_by WHERE v.tenant_id = {tid} AND v.id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $w) {
             throw new BizException('Wave not found.');
         }
@@ -30,7 +30,7 @@ final class Waves
     public static function shipments(int $id): array
     {
         return Db::rows('SELECT s.*, so.number order_no, c.name customer, c.town FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id
-                          WHERE s.wave_id = ? ORDER BY s.id', [$id]);
+                          WHERE s.tenant_id = {tid} AND s.wave_id = ? ORDER BY s.id', [$id]);
     }
 
     /** Reserved picks of the wave's shipments still to pick, in walking order (bin sort, then code). */
@@ -40,7 +40,7 @@ final class Waves
                                 sh.number shipment_no, sh.id shipment_id
                            FROM {allocations} a JOIN {shipments} sh ON sh.id = a.doc_id AND a.doc_type = 'shipment' JOIN {stock} s ON s.id = a.stock_id JOIN {bins} b ON b.id = s.bin_id
                            JOIN {items} i ON i.id = s.item_id LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id
-                          WHERE sh.wave_id = ? AND sh.status = 'allocated' AND a.status = 'active' AND a.stage = 'reserved'
+                          WHERE a.tenant_id = {tid} AND sh.wave_id = ? AND sh.status = 'allocated' AND a.status = 'active' AND a.stage = 'reserved'
                           ORDER BY b.sort, b.code, i.sku, l.expiry_date, se.serial_no, sh.id", [$id]);
     }
 
@@ -60,10 +60,10 @@ final class Waves
     /** Shipments that can go into a new wave: allocated, in this warehouse, not in an open wave. */
     public static function candidates(int $wh): array
     {
-        return Db::rows("SELECT s.*, so.number order_no, so.required_date, c.name customer, c.town, (SELECT COUNT(*) FROM {shipment_lines} sl WHERE sl.shipment_id = s.id) n_lines
+        return Db::rows("SELECT s.*, so.number order_no, so.required_date, c.name customer, c.town, (SELECT COUNT(*) FROM {shipment_lines} sl WHERE sl.tenant_id = {tid} AND sl.shipment_id = s.id) n_lines
                            FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id
                            LEFT JOIN {pick_waves} v ON v.id = s.wave_id
-                          WHERE s.warehouse_id = ? AND s.status = 'allocated' AND (s.wave_id IS NULL OR v.status <> 'open') ORDER BY so.required_date IS NULL, so.required_date, s.id", [$wh]);
+                          WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND s.status = 'allocated' AND (s.wave_id IS NULL OR v.status <> 'open') ORDER BY so.required_date IS NULL, so.required_date, s.id", [$wh]);
     }
 
     public static function create(int $wh, array $shipmentIds, string $note = ''): int
@@ -79,7 +79,7 @@ final class Waves
                 throw new BizException('A wave holds up to 60 shipments.');
             }
             $rows = Db::rows('SELECT s.id, s.number, s.status, s.warehouse_id, v.status wave_status FROM {shipments} s LEFT JOIN {pick_waves} v ON v.id = s.wave_id
-                               WHERE s.id IN (' . implode(',', $ids) . ') ORDER BY s.id FOR UPDATE', []);
+                               WHERE s.tenant_id = {tid} AND s.id IN (' . implode(',', $ids) . ') ORDER BY s.id FOR UPDATE', []);
             if (count($rows) !== count($ids)) {
                 throw new BizException('A chosen shipment was not found.');
             }
@@ -96,7 +96,7 @@ final class Waves
             }
             $note = mb_substr(trim($note), 0, 250);
             $id   = Db::insert('pick_waves', ['number' => Numbers::next('wave'), 'warehouse_id' => $wh, 'status' => 'open', 'note' => $note ?: null, 'created_by' => Auth::id(), 'created_at' => Db::now()]);
-            Db::exec('UPDATE {shipments} SET wave_id = ? WHERE id IN (' . implode(',', $ids) . ')', [$id]);
+            Db::exec('UPDATE {shipments} SET wave_id = ? WHERE tenant_id = {tid} AND id IN (' . implode(',', $ids) . ')', [$id]);
             Audit::log('wave.create', 'wave', $id, null, ['shipments' => array_column($rows, 'number')]);
             return $id;
         });
@@ -112,13 +112,13 @@ final class Waves
                 if ($w['status'] !== 'open') {
                     throw new BizException('This wave is already ' . $w['status'] . '.');
                 }
-                $todo = Db::rows("SELECT id FROM {shipments} WHERE wave_id = ? AND status = 'allocated' ORDER BY id", [$id]);
+                $todo = Db::rows("SELECT id FROM {shipments} WHERE tenant_id = {tid} AND wave_id = ? AND status = 'allocated' ORDER BY id", [$id]);
                 if (! $todo) {
                     throw new BizException('No shipment in this wave is waiting to be picked.');
                 }
                 $byShipment = [];
                 foreach ($short as $aid => $q) {
-                    $sid = (int) Db::value("SELECT doc_id FROM {allocations} WHERE id = ? AND doc_type = 'shipment'", [(int) $aid]);
+                    $sid = (int) Db::value("SELECT doc_id FROM {allocations} WHERE tenant_id = {tid} AND id = ? AND doc_type = 'shipment'", [(int) $aid]);
                     if ($sid) {
                         $byShipment[$sid][(int) $aid] = $q;
                     }
@@ -127,11 +127,11 @@ final class Waves
                 foreach ($todo as $s) {
                     $sid = (int) $s['id'];
                     $mine = $byShipment[$sid] ?? [];
-                    $all  = Db::rows("SELECT qty FROM {allocations} WHERE doc_type = 'shipment' AND doc_id = ? AND status = 'active' AND stage = 'reserved'", [$sid]);
+                    $all  = Db::rows("SELECT qty FROM {allocations} WHERE tenant_id = {tid} AND doc_type = 'shipment' AND doc_id = ? AND status = 'active' AND stage = 'reserved'", [$sid]);
                     $nothing = $all && count($mine) === count($all) && array_sum(array_map('floatval', $mine)) <= 0;
                     if ($nothing) {
                         // nothing found for this shipment: leave it allocated and take it out of the wave
-                        Db::exec('UPDATE {shipments} SET wave_id = NULL WHERE id = ?', [$sid]);
+                        Db::exec('UPDATE {shipments} SET wave_id = NULL WHERE tenant_id = {tid} AND id = ?', [$sid]);
                         continue;
                     }
                     Shipments::pick($sid, $mine, null);
@@ -140,7 +140,7 @@ final class Waves
                 if (! $picked) {
                     throw new BizException('Nothing was picked.');
                 }
-                Db::exec("UPDATE {pick_waves} SET status = 'picked', picked_by = ?, picked_at = ? WHERE id = ?", [Auth::id(), Db::now(), $id]);
+                Db::exec("UPDATE {pick_waves} SET status = 'picked', picked_by = ?, picked_at = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), $id]);
                 Audit::log('wave.pick', 'wave', $id, null, ['shipments' => $picked]);
                 return $id;
             });
@@ -155,8 +155,8 @@ final class Waves
             if ($w['status'] !== 'open') {
                 throw new BizException('Only an open wave can be cancelled.');
             }
-            Db::exec("UPDATE {shipments} SET wave_id = NULL WHERE wave_id = ? AND status = 'allocated'", [$id]);
-            Db::exec("UPDATE {pick_waves} SET status = 'cancelled' WHERE id = ?", [$id]);
+            Db::exec("UPDATE {shipments} SET wave_id = NULL WHERE tenant_id = {tid} AND wave_id = ? AND status = 'allocated'", [$id]);
+            Db::exec("UPDATE {pick_waves} SET status = 'cancelled' WHERE tenant_id = {tid} AND id = ?", [$id]);
             Audit::log('wave.cancel', 'wave', $id, ['status' => 'open'], ['status' => 'cancelled']);
         });
     }

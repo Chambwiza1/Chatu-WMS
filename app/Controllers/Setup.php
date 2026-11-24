@@ -14,8 +14,8 @@ class Setup extends BaseController
         if ($r = $this->need('warehouse.setup')) {
             return $r;
         }
-        $rows = Db::rows('SELECT w.*, (SELECT COUNT(*) FROM {bins} b WHERE b.warehouse_id = w.id) bins, (SELECT COUNT(*) FROM {zones} z WHERE z.warehouse_id = w.id) zones,
-                                 (SELECT COALESCE(SUM(qty), 0) FROM {stock} s WHERE s.warehouse_id = w.id) units FROM {warehouses} w ORDER BY w.active DESC, w.code');
+        $rows = Db::rows('SELECT w.*, (SELECT COUNT(*) FROM {bins} b WHERE b.tenant_id = {tid} AND b.warehouse_id = w.id) bins, (SELECT COUNT(*) FROM {zones} z WHERE z.tenant_id = {tid} AND z.warehouse_id = w.id) zones,
+                                 (SELECT COALESCE(SUM(qty), 0) FROM {stock} s WHERE s.tenant_id = {tid} AND s.warehouse_id = w.id) units FROM {warehouses} w WHERE w.tenant_id = {tid} ORDER BY w.active DESC, w.code');
         return $this->render('setup/index', ['rows' => array_values(array_filter($rows, static fn ($w) => Access::canAt((int) $w['id'], 'warehouse.setup'))), 'all' => Access::companyWide('warehouse.setup')], 'Warehouses and bins');
     }
 
@@ -33,9 +33,9 @@ class Setup extends BaseController
             return $r;
         }
         $w = W::get($id);
-        $bins = Db::rows('SELECT b.*, z.code zone, (SELECT COUNT(*) FROM {stock} s WHERE s.bin_id = b.id) rows_in, (SELECT COALESCE(SUM(qty), 0) FROM {stock} s WHERE s.bin_id = b.id) units
-                            FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE b.warehouse_id = ? ORDER BY b.is_system DESC, b.sort, b.code', [$id]);
-        return $this->render('setup/show', ['w' => $w, 'bins' => $bins, 'zones' => Db::rows('SELECT * FROM {zones} WHERE warehouse_id = ? ORDER BY code', [$id])], $w['code']);
+        $bins = Db::rows('SELECT b.*, z.code zone, (SELECT COUNT(*) FROM {stock} s WHERE s.tenant_id = {tid} AND s.bin_id = b.id) rows_in, (SELECT COALESCE(SUM(qty), 0) FROM {stock} s WHERE s.tenant_id = {tid} AND s.bin_id = b.id) units
+                            FROM {bins} b LEFT JOIN {zones} z ON z.id = b.zone_id WHERE b.tenant_id = {tid} AND b.warehouse_id = ? ORDER BY b.is_system DESC, b.sort, b.code', [$id]);
+        return $this->render('setup/show', ['w' => $w, 'bins' => $bins, 'zones' => Db::rows('SELECT * FROM {zones} WHERE tenant_id = {tid} AND warehouse_id = ? ORDER BY code', [$id])], $w['code']);
     }
 
     public function update(int $id)
@@ -66,7 +66,7 @@ class Setup extends BaseController
 
     public function binStatus(int $binId)
     {
-        $wh = (int) Db::value('SELECT warehouse_id FROM {bins} WHERE id = ?', [$binId]);
+        $wh = (int) Db::value('SELECT warehouse_id FROM {bins} WHERE tenant_id = {tid} AND id = ?', [$binId]);
         return $this->act(function () use ($binId, $wh) {
             W::setBinStatus($binId, (string) $this->in('status'), (string) $this->in('note', ''));
             return $this->ok('Bin updated.', 'warehouses/' . $wh);

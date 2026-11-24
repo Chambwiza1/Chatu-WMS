@@ -27,7 +27,7 @@ final class Counts
 {
     public static function get(int $id, bool $lock = false): array
     {
-        $c = Db::row('SELECT * FROM {counts} WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
+        $c = Db::row('SELECT * FROM {counts} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $c) {
             throw new BizException('Unknown count.');
         }
@@ -62,7 +62,7 @@ final class Counts
             }
             $id = Db::insert('counts', ['number' => Numbers::next('count'), 'warehouse_id' => $wh, 'zone_id' => $zone, 'item_id' => $item, 'blind' => ! empty($d['blind']) ? 1 : 0,
                 'status' => 'open', 'notes' => trim((string) ($d['notes'] ?? '')) ?: null, 'created_by' => Auth::id(), 'created_at' => Db::now()]);
-            $rows = Db::rows('SELECT s.* FROM {stock} s JOIN {bins} b ON b.id = s.bin_id WHERE ' . implode(' AND ', $w) . ' ORDER BY b.sort, b.code, s.item_id, s.lot_id, s.serial_id', $b);
+            $rows = Db::rows('SELECT s.* FROM {stock} s JOIN {bins} b ON b.id = s.bin_id WHERE s.tenant_id = {tid} AND ' . implode(' AND ', $w) . ' ORDER BY b.sort, b.code, s.item_id, s.lot_id, s.serial_id', $b);
             foreach ($rows as $r) {
                 Db::insert('count_lines', ['count_id' => $id, 'bin_id' => $r['bin_id'], 'item_id' => $r['item_id'], 'lot_id' => $r['lot_id'], 'serial_id' => $r['serial_id'], 'status' => $r['status'], 'expected_qty' => $r['qty']]);
             }
@@ -84,12 +84,12 @@ final class Counts
                 throw new BizException('This count is ' . $c['status'] . '; counts can no longer be entered.');
             }
             foreach ($counts as $lineId => $q) {
-                $line = Db::row('SELECT * FROM {count_lines} WHERE id = ? AND count_id = ? FOR UPDATE', [(int) $lineId, $id]);
+                $line = Db::row('SELECT * FROM {count_lines} WHERE tenant_id = {tid} AND id = ? AND count_id = ? FOR UPDATE', [(int) $lineId, $id]);
                 if (! $line) {
                     throw new BizException('That line is not on this count.');
                 }
                 if ($q === '' || $q === null) {
-                    Db::exec('UPDATE {count_lines} SET counted_qty = NULL, counted_by = NULL WHERE id = ?', [$lineId]);
+                    Db::exec('UPDATE {count_lines} SET counted_qty = NULL, counted_by = NULL WHERE tenant_id = {tid} AND id = ?', [$lineId]);
                     continue;
                 }
                 $q = Ledger::q($q);
@@ -97,7 +97,7 @@ final class Counts
                     throw new BizException('Counts are zero or more (a serial number is 0 or 1).');
                 }
                 Items::checkQty(Items::get((int) $line['item_id']), $q);
-                Db::exec('UPDATE {count_lines} SET counted_qty = ?, counted_by = ? WHERE id = ?', [$q, Auth::id(), $lineId]);
+                Db::exec('UPDATE {count_lines} SET counted_qty = ?, counted_by = ? WHERE tenant_id = {tid} AND id = ?', [$q, Auth::id(), $lineId]);
             }
             foreach ($extras as $x) {
                 $q = Ledger::q($x['qty'] ?? 0);
@@ -119,13 +119,13 @@ final class Counts
                         throw new BizException('Add found serial-numbered units one per line.');
                     }
                     $sn = trim((string) ($x['serial_no'] ?? ''));
-                    $s  = Db::row('SELECT * FROM {serials} WHERE item_id = ? AND serial_no = ?', [$item['id'], $sn]);
+                    $s  = Db::row('SELECT * FROM {serials} WHERE tenant_id = {tid} AND item_id = ? AND serial_no = ?', [$item['id'], $sn]);
                     $serialId = $s ? (int) $s['id'] : Db::insert('serials', ['item_id' => $item['id'], 'serial_no' => $sn, 'lot_id' => $lotId, 'status' => 'lost', 'created_at' => Db::now()]);
                 }
                 $status = in_array($x['status'] ?? '', Ledger::STATUSES, true) ? $x['status'] : 'available';
-                $dup = Db::value('SELECT id FROM {count_lines} WHERE count_id = ? AND bin_id = ? AND item_id = ? AND COALESCE(lot_id, 0) = ? AND COALESCE(serial_id, 0) = ? AND status = ?', [$id, $bin['id'], $item['id'], (int) $lotId, (int) $serialId, $status]);
+                $dup = Db::value('SELECT id FROM {count_lines} WHERE tenant_id = {tid} AND count_id = ? AND bin_id = ? AND item_id = ? AND COALESCE(lot_id, 0) = ? AND COALESCE(serial_id, 0) = ? AND status = ?', [$id, $bin['id'], $item['id'], (int) $lotId, (int) $serialId, $status]);
                 if ($dup) {
-                    Db::exec('UPDATE {count_lines} SET counted_qty = ?, counted_by = ? WHERE id = ?', [$q, Auth::id(), $dup]);
+                    Db::exec('UPDATE {count_lines} SET counted_qty = ?, counted_by = ? WHERE tenant_id = {tid} AND id = ?', [$q, Auth::id(), $dup]);
                 } else {
                     Db::insert('count_lines', ['count_id' => $id, 'bin_id' => $bin['id'], 'item_id' => $item['id'], 'lot_id' => $lotId, 'serial_id' => $serialId, 'status' => $status, 'expected_qty' => 0, 'counted_qty' => $q, 'is_extra' => 1, 'counted_by' => Auth::id()]);
                 }
@@ -139,8 +139,8 @@ final class Counts
     {
         $out = [];
         foreach (Db::rows('SELECT cl.*, i.sku, i.name, i.uom, i.decimals, b.code bin_code, l.lot_no, se.serial_no FROM {count_lines} cl JOIN {items} i ON i.id = cl.item_id JOIN {bins} b ON b.id = cl.bin_id
-                             LEFT JOIN {lots} l ON l.id = cl.lot_id LEFT JOIN {serials} se ON se.id = cl.serial_id WHERE cl.count_id = ? ORDER BY b.sort, b.code, i.sku, cl.id', [$id]) as $l) {
-            $now = (float) Db::value('SELECT COALESCE(SUM(qty), 0) FROM {stock} WHERE bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ?', [$l['bin_id'], $l['item_id'], (int) $l['lot_id'], (int) $l['serial_id'], $l['status']]);
+                             LEFT JOIN {lots} l ON l.id = cl.lot_id LEFT JOIN {serials} se ON se.id = cl.serial_id WHERE cl.tenant_id = {tid} AND cl.count_id = ? ORDER BY b.sort, b.code, i.sku, cl.id', [$id]) as $l) {
+            $now = (float) Db::value('SELECT COALESCE(SUM(qty), 0) FROM {stock} WHERE tenant_id = {tid} AND bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ?', [$l['bin_id'], $l['item_id'], (int) $l['lot_id'], (int) $l['serial_id'], $l['status']]);
             $l['system_qty'] = $now;
             $l['variance']   = $l['counted_qty'] === null ? null : Ledger::q((float) $l['counted_qty'] - $now);
             $l['unit_cost']  = Valuation::latestUnit((int) $l['item_id'], null);
@@ -157,7 +157,7 @@ final class Counts
             if ($c['status'] !== 'open') {
                 throw new BizException('This count is already ' . $c['status'] . '.');
             }
-            $missing = (int) Db::value('SELECT COUNT(*) FROM {count_lines} WHERE count_id = ? AND counted_qty IS NULL', [$id]);
+            $missing = (int) Db::value('SELECT COUNT(*) FROM {count_lines} WHERE tenant_id = {tid} AND count_id = ? AND counted_qty IS NULL', [$id]);
             if ($missing) {
                 throw new BizException($missing . ' line(s) have not been counted. Enter 0 for what is not there.');
             }
@@ -165,7 +165,7 @@ final class Counts
             foreach (self::variances($id) as $l) {
                 $value += abs((float) $l['variance'] * (float) $l['unit_cost']);
             }
-            Db::exec("UPDATE {counts} SET status = 'submitted', submitted_by = ?, submitted_at = ?, value = ? WHERE id = ?", [Auth::id(), Db::now(), round($value, 2), $id]);
+            Db::exec("UPDATE {counts} SET status = 'submitted', submitted_by = ?, submitted_at = ?, value = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), round($value, 2), $id]);
             Audit::log('count.submit', 'count', $id, null, ['variance_value' => round($value, 2)]);
             $limit = (float) Settings::get('count_auto_limit');
             if ($limit > 0 && $value <= $limit && Access::canAt((int) $c['warehouse_id'], 'stock.approve')) {
@@ -185,7 +185,7 @@ final class Counts
             if ($c['status'] !== 'submitted') {
                 throw new BizException('Only a submitted count can be sent back.');
             }
-            Db::exec("UPDATE {counts} SET status = 'open' WHERE id = ?", [$id]);
+            Db::exec("UPDATE {counts} SET status = 'open' WHERE tenant_id = {tid} AND id = ?", [$id]);
             Audit::log('count.reopen', 'count', $id, null, null, 'success', $why);
             Notify::user((int) $c['submitted_by'], 'count', 'Count ' . $c['number'] . ' was sent back for a recount', $why, '/counts/' . $id);
         });
@@ -199,7 +199,7 @@ final class Counts
             if ($c['status'] !== 'submitted') {
                 throw new BizException('Only a submitted count can be approved.');
             }
-            if ((int) $c['submitted_by'] === Auth::id() || (int) Db::value('SELECT COUNT(*) FROM {count_lines} WHERE count_id = ? AND counted_by = ?', [$id, Auth::id()]) > 0) {
+            if ((int) $c['submitted_by'] === Auth::id() || (int) Db::value('SELECT COUNT(*) FROM {count_lines} WHERE tenant_id = {tid} AND count_id = ? AND counted_by = ?', [$id, Auth::id()]) > 0) {
                 throw new BizException('You submitted or counted this count: someone else must approve it.');
             }
             self::post($id, $note);
@@ -214,7 +214,7 @@ final class Counts
             if (! in_array($c['status'], ['open', 'submitted'], true)) {
                 throw new BizException('This count is already ' . $c['status'] . '.');
             }
-            Db::exec("UPDATE {counts} SET status = 'cancelled', notes = CONCAT(COALESCE(notes, ''), ?) WHERE id = ?", ["\nCancelled: " . mb_substr($why, 0, 200), $id]);
+            Db::exec("UPDATE {counts} SET status = 'cancelled', notes = CONCAT(COALESCE(notes, ''), ?) WHERE tenant_id = {tid} AND id = ?", ["\nCancelled: " . mb_substr($why, 0, 200), $id]);
             Audit::log('count.cancel', 'count', $id, null, null, 'success', $why);
         });
     }
@@ -223,14 +223,14 @@ final class Counts
     {
         $c  = self::get($id, true);
         $wh = (int) $c['warehouse_id'];
-        $lines = Db::rows('SELECT * FROM {count_lines} WHERE count_id = ? ORDER BY id', [$id]);
+        $lines = Db::rows('SELECT * FROM {count_lines} WHERE tenant_id = {tid} AND count_id = ? ORDER BY id', [$id]);
         Ledger::lock(array_map(static fn ($l) => [$wh, (int) $l['item_id']], $lines));
         $net = 0.0;
         foreach ($lines as $l) {
-            $row = Db::row('SELECT * FROM {stock} WHERE bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ? FOR UPDATE', [$l['bin_id'], $l['item_id'], (int) $l['lot_id'], (int) $l['serial_id'], $l['status']]);
+            $row = Db::row('SELECT * FROM {stock} WHERE tenant_id = {tid} AND bin_id = ? AND item_id = ? AND lot_key = ? AND serial_key = ? AND status = ? FOR UPDATE', [$l['bin_id'], $l['item_id'], (int) $l['lot_id'], (int) $l['serial_id'], $l['status']]);
             $now = $row ? (float) $row['qty'] : 0.0;
             $var = Ledger::q((float) $l['counted_qty'] - $now);
-            Db::exec('UPDATE {count_lines} SET posted_qty = ? WHERE id = ?', [$var, $l['id']]);
+            Db::exec('UPDATE {count_lines} SET posted_qty = ? WHERE tenant_id = {tid} AND id = ?', [$var, $l['id']]);
             if (abs($var) <= Ledger::EPS) {
                 continue;
             }
@@ -244,7 +244,7 @@ final class Counts
                 $net -= $r['value'];
             } else {
                 if ($l['serial_id']) {
-                    $s = Db::row('SELECT * FROM {serials} WHERE id = ? FOR UPDATE', [$l['serial_id']]);
+                    $s = Db::row('SELECT * FROM {serials} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$l['serial_id']]);
                     if ($s['status'] === 'in_stock' && (int) $s['warehouse_id'] !== $wh) {
                         throw new BizException('Serial ' . $s['serial_no'] . ' is recorded in stock in another warehouse. Sort that out first.');
                     }
@@ -258,7 +258,7 @@ final class Counts
                 $net += $var * $unit;
             }
         }
-        Db::exec("UPDATE {counts} SET status = 'posted', posted_by = ?, posted_at = ? WHERE id = ?", [Auth::id(), Db::now(), $id]);
+        Db::exec("UPDATE {counts} SET status = 'posted', posted_by = ?, posted_at = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), $id]);
         Audit::log('count.post', 'count', $id, null, ['net_value' => round($net, 2)], 'success', $note);
         if ((int) $c['submitted_by'] !== Auth::id()) {
             Notify::user((int) $c['submitted_by'], 'count', 'Count ' . $c['number'] . ' was approved and posted', null, '/counts/' . $id);

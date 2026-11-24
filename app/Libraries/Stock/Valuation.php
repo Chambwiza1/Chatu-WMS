@@ -18,13 +18,13 @@ final class Valuation
         $taken  = [];
         // $prefer [source_type, source_id]: take that inflow's own layer first (voiding a production run takes back exactly what it made)
         $first  = $prefer ? '(source_type = ' . Db::conn()->escape($prefer[0]) . ' AND source_id = ' . (int) $prefer[1] . ') DESC, ' : '';
-        $layers = Db::rows("SELECT * FROM {cost_layers} WHERE warehouse_id = ? AND item_id = ? AND qty_left > 0 ORDER BY {$first}received_at, id FOR UPDATE", [$wh, $itemId]);
+        $layers = Db::rows("SELECT * FROM {cost_layers} WHERE tenant_id = {tid} AND warehouse_id = ? AND item_id = ? AND qty_left > 0 ORDER BY {$first}received_at, id FOR UPDATE", [$wh, $itemId]);
         foreach ($layers as $l) {
             if ($need <= Ledger::EPS) {
                 break;
             }
             $use = Ledger::q(min($need, (float) $l['qty_left']));
-            Db::exec('UPDATE {cost_layers} SET qty_left = qty_left - ? WHERE id = ?', [$use, $l['id']]);
+            Db::exec('UPDATE {cost_layers} SET qty_left = qty_left - ? WHERE tenant_id = {tid} AND id = ?', [$use, $l['id']]);
             Db::insert('cost_entries', [
                 'at' => Db::now(), 'layer_id' => $l['id'], 'warehouse_id' => $wh, 'item_id' => $itemId, 'qty' => $use,
                 'unit_cost' => $l['unit_cost'], 'movement_id' => $movementId, 'doc_type' => $docType, 'doc_id' => $docId,
@@ -90,16 +90,16 @@ final class Valuation
             $w[] = 'item_id = ?';
             $b[] = $itemId;
         }
-        return round((float) Db::value('SELECT COALESCE(SUM(qty_left * unit_cost), 0) FROM {cost_layers} WHERE ' . implode(' AND ', $w), $b), 2);
+        return round((float) Db::value('SELECT COALESCE(SUM(qty_left * unit_cost), 0) FROM {cost_layers} WHERE tenant_id = {tid} AND ' . implode(' AND ', $w), $b), 2);
     }
 
     /** Latest unit cost known for an item (newest layer anywhere, else the item's last cost). */
     public static function latestUnit(int $itemId, ?int $wh = null): float
     {
-        $c = Db::value('SELECT unit_cost FROM {cost_layers} WHERE item_id = ?' . ($wh ? ' AND warehouse_id = ' . (int) $wh : '') . ' ORDER BY received_at DESC, id DESC LIMIT 1', [$itemId]);
+        $c = Db::value('SELECT unit_cost FROM {cost_layers} WHERE tenant_id = {tid} AND item_id = ?' . ($wh ? ' AND warehouse_id = ' . (int) $wh : '') . ' ORDER BY received_at DESC, id DESC LIMIT 1', [$itemId]);
         if ($c === null && $wh) {
             return self::latestUnit($itemId);
         }
-        return $c !== null ? (float) $c : (float) Db::value('SELECT last_cost FROM {items} WHERE id = ?', [$itemId]);
+        return $c !== null ? (float) $c : (float) Db::value('SELECT last_cost FROM {items} WHERE tenant_id = {tid} AND id = ?', [$itemId]);
     }
 }

@@ -57,13 +57,13 @@ final class Jobs
     {
         $n    = 0;
         $days = (int) Settings::get('expiry_warn_days');
-        foreach (Db::rows('SELECT id, code FROM {warehouses} WHERE active = 1') as $w) {
-            $expired = (int) Db::value('SELECT COUNT(DISTINCT s.lot_id) FROM {stock} s JOIN {lots} l ON l.id = s.lot_id WHERE s.warehouse_id = ? AND l.expiry_date < CURDATE()', [$w['id']]);
-            $soon    = (int) Db::value("SELECT COUNT(DISTINCT s.lot_id) FROM {stock} s JOIN {lots} l ON l.id = s.lot_id WHERE s.warehouse_id = ? AND l.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL $days DAY)", [$w['id']]);
+        foreach (Db::rows('SELECT id, code FROM {warehouses} WHERE tenant_id = {tid} AND active = 1') as $w) {
+            $expired = (int) Db::value('SELECT COUNT(DISTINCT s.lot_id) FROM {stock} s JOIN {lots} l ON l.id = s.lot_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND l.expiry_date < CURDATE()', [$w['id']]);
+            $soon    = (int) Db::value("SELECT COUNT(DISTINCT s.lot_id) FROM {stock} s JOIN {lots} l ON l.id = s.lot_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND l.expiry_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL $days DAY)", [$w['id']]);
             if ($expired || $soon) {
                 $n += Notify::holders('inventory.move', (int) $w['id'], 'expiry', $w['code'] . ': ' . $expired . ' expired batch(es), ' . $soon . ' expiring within ' . $days . ' days', null, '/reports/expiry?warehouse_id=' . $w['id']);
             }
-            $late = (int) Db::value("SELECT COUNT(*) FROM {transfers} WHERE to_warehouse_id = ? AND status IN ('in_transit','partly_received') AND dispatched_at < ?", [$w['id'], gmdate('Y-m-d H:i:s', time() - 3 * 86400)]);
+            $late = (int) Db::value("SELECT COUNT(*) FROM {transfers} WHERE tenant_id = {tid} AND to_warehouse_id = ? AND status IN ('in_transit','partly_received') AND dispatched_at < ?", [$w['id'], gmdate('Y-m-d H:i:s', time() - 3 * 86400)]);
             if ($late) {
                 $n += Notify::holders('transfer.receive', (int) $w['id'], 'transfer_late', $w['code'] . ': ' . $late . ' transfer(s) on the way for more than 3 days', 'Receive them, or record what is missing.', '/transfers?view=incoming');
             }

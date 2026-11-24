@@ -73,7 +73,7 @@ final class AssetsImport
     public static function plan(array $rows): array
     {
         $ours = [];
-        foreach (Db::rows('SELECT * FROM {vehicles}') as $v) {
+        foreach (Db::rows('SELECT * FROM {vehicles} WHERE tenant_id = {tid}') as $v) {
             $ours[self::norm($v['reg_no'])] = $v;
         }
         $seen = [];
@@ -106,7 +106,7 @@ final class AssetsImport
             $linked = $added = $skipped = 0;
             foreach (self::plan($rows) as $r) {
                 if ($r['action'] === 'match') {
-                    $v = Db::row('SELECT * FROM {vehicles} WHERE id = ? FOR UPDATE', [$r['vehicle_id']]);
+                    $v = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$r['vehicle_id']]);
                     $set = ['asset_code' => $r['asset'] ?: null, 'vin' => $r['vin'] ?: $v['vin']];
                     foreach (['make' => 'make', 'model' => 'model'] as $col => $k) {
                         if (! $v[$col] && $r[$k] !== '') {
@@ -116,7 +116,7 @@ final class AssetsImport
                     if (! $v['insurance_expiry'] && $r['insured']) {
                         $set['insurance_expiry'] = $r['insured'];
                     }
-                    Db::exec('UPDATE {vehicles} SET ' . implode(', ', array_map(static fn ($c) => "$c = ?", array_keys($set))) . ' WHERE id = ?', array_merge(array_values($set), [$v['id']]));
+                    Db::exec('UPDATE {vehicles} SET ' . implode(', ', array_map(static fn ($c) => "$c = ?", array_keys($set))) . ' WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($set), [$v['id']]));
                     Audit::log('vehicle.link_assets', 'vehicle', (int) $v['id'], array_intersect_key($v, $set), $set);
                     $linked++;
                 } elseif ($r['action'] === 'add' && $addNew) {
@@ -126,7 +126,7 @@ final class AssetsImport
                     }
                     $id = Fleet::saveVehicle(['reg_no' => $r['reg'], 'make' => $r['make'], 'model' => $r['model'], 'body' => self::guessBody($r['desc']), 'ownership' => 'own',
                         'home_warehouse_id' => $homeWarehouse, 'insurance_expiry' => $r['insured'], 'notes' => $r['desc'] !== '' ? 'From Chatu Assets: ' . mb_substr($r['desc'], 0, 200) : null]);
-                    Db::exec('UPDATE {vehicles} SET asset_code = ?, vin = ? WHERE id = ?', [$r['asset'] ?: null, $r['vin'] ?: null, $id]);
+                    Db::exec('UPDATE {vehicles} SET asset_code = ?, vin = ? WHERE tenant_id = {tid} AND id = ?', [$r['asset'] ?: null, $r['vin'] ?: null, $id]);
                     $added++;
                 } else {
                     $skipped++;

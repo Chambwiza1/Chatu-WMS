@@ -34,7 +34,7 @@ final class Adjustments
         return (int) Db::atomic(static function () use ($d, $wh, $token) {
             return Db::once($token, Auth::id(), static function () use ($d, $wh) {
                 $reason = (string) ($d['reason_code'] ?? '');
-                if (! Db::value("SELECT 1 FROM {reasons} WHERE use_for = 'adjust' AND code = ? AND active = 1", [$reason])) {
+                if (! Db::value("SELECT 1 FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'adjust' AND code = ? AND active = 1", [$reason])) {
                     throw new BizException('Choose a reason for the adjustment.');
                 }
                 if (trim((string) ($d['notes'] ?? '')) === '') {
@@ -95,18 +95,18 @@ final class Adjustments
                         if (-$l['qty'] - $free > Ledger::EPS) {
                             throw new BizException('Only ' . Items::fmt($l['item'], $free) . ' of ' . $l['item']['sku'] . ' is free there (the rest is reserved).');
                         }
-                        Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated + ? WHERE id = ?', [-$l['qty'], $row['id']]);
+                        Db::exec('UPDATE {stock} SET qty_allocated = qty_allocated + ? WHERE tenant_id = {tid} AND id = ?', [-$l['qty'], $row['id']]);
                         Db::insert('allocations', ['stock_id' => $row['id'], 'doc_type' => 'adjustment', 'doc_id' => $id, 'doc_line_id' => $lid, 'qty' => -$l['qty'], 'stage' => 'reserved', 'status' => 'active', 'created_at' => Db::now()]);
                     }
                     $value += abs($l['qty'] * $unit);
                 }
-                Db::exec('UPDATE {adjustments} SET value = ? WHERE id = ?', [round($value, 2), $id]);
+                Db::exec('UPDATE {adjustments} SET value = ? WHERE tenant_id = {tid} AND id = ?', [round($value, 2), $id]);
                 Audit::log('adjustment.request', 'adjustment', $id, null, ['lines' => count($lines), 'value' => round($value, 2), 'reason' => $reason]);
                 $limit = (float) Settings::get('adjust_auto_limit');
                 if ($limit > 0 && $value <= $limit && Access::canAt($wh, 'stock.approve')) {
                     self::post($id, null, 'Within the automatic limit');
                 } else {
-                    Notify::holders('stock.approve', $wh, 'adjustment', 'Adjustment ' . Db::value('SELECT number FROM {adjustments} WHERE id = ?', [$id]) . ' waits for approval', 'Value ' . number_format($value, 2), '/adjustments/' . $id, Auth::id());
+                    Notify::holders('stock.approve', $wh, 'adjustment', 'Adjustment ' . Db::value('SELECT number FROM {adjustments} WHERE tenant_id = {tid} AND id = ?', [$id]) . ' waits for approval', 'Value ' . number_format($value, 2), '/adjustments/' . $id, Auth::id());
                 }
                 return $id;
             });
@@ -116,7 +116,7 @@ final class Adjustments
     public static function approve(int $id, string $note = ''): void
     {
         Db::atomic(static function () use ($id, $note) {
-            $a = Db::row('SELECT * FROM {adjustments} WHERE id = ? FOR UPDATE', [$id]);
+            $a = Db::row('SELECT * FROM {adjustments} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
             if (! $a) {
                 throw new BizException('Unknown adjustment.');
             }
@@ -134,7 +134,7 @@ final class Adjustments
     public static function reject(int $id, string $note): void
     {
         Db::atomic(static function () use ($id, $note) {
-            $a = Db::row('SELECT * FROM {adjustments} WHERE id = ? FOR UPDATE', [$id]);
+            $a = Db::row('SELECT * FROM {adjustments} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
             if (! $a) {
                 throw new BizException('Unknown adjustment.');
             }
@@ -148,10 +148,10 @@ final class Adjustments
             if (trim($note) === '') {
                 throw new BizException('Say why it is rejected (or withdrawn).');
             }
-            $lines = Db::rows('SELECT DISTINCT item_id FROM {adjustment_lines} WHERE adjustment_id = ?', [$id]);
+            $lines = Db::rows('SELECT DISTINCT item_id FROM {adjustment_lines} WHERE tenant_id = {tid} AND adjustment_id = ?', [$id]);
             Ledger::lock(array_map(static fn ($l) => [(int) $a['warehouse_id'], (int) $l['item_id']], $lines));
             \App\Libraries\Stock\Alloc::release('adjustment', $id);
-            Db::exec("UPDATE {adjustments} SET status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? WHERE id = ?", [Auth::id(), Db::now(), mb_substr($note, 0, 255), $id]);
+            Db::exec("UPDATE {adjustments} SET status = 'rejected', decided_by = ?, decided_at = ?, decision_note = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), mb_substr($note, 0, 255), $id]);
             Audit::log($self ? 'adjustment.withdraw' : 'adjustment.reject', 'adjustment', $id, null, null, 'success', $note);
             if (! $self) {
                 Notify::user((int) $a['created_by'], 'adjustment', 'Adjustment ' . $a['number'] . ' was rejected', $note, '/adjustments/' . $id);
@@ -161,21 +161,21 @@ final class Adjustments
 
     private static function post(int $id, ?int $approver, string $note): void
     {
-        $a     = Db::row('SELECT * FROM {adjustments} WHERE id = ? FOR UPDATE', [$id]);
+        $a     = Db::row('SELECT * FROM {adjustments} WHERE tenant_id = {tid} AND id = ? FOR UPDATE', [$id]);
         $wh    = (int) $a['warehouse_id'];
-        $lines = Db::rows('SELECT * FROM {adjustment_lines} WHERE adjustment_id = ? ORDER BY id', [$id]);
+        $lines = Db::rows('SELECT * FROM {adjustment_lines} WHERE tenant_id = {tid} AND adjustment_id = ? ORDER BY id', [$id]);
         Ledger::lock(array_map(static fn ($l) => [$wh, (int) $l['item_id']], $lines));
         $value = 0.0;
         foreach ($lines as $l) {
             $item = Items::get((int) $l['item_id']);
             $base = ['doc_type' => 'adjustment', 'doc_id' => $id, 'doc_line_id' => (int) $l['id'], 'reason_code' => $a['reason_code'], 'note' => mb_substr((string) $a['notes'], 0, 255)];
             if ((float) $l['qty'] < 0) {
-                $alloc = Db::row("SELECT * FROM {allocations} WHERE doc_type = 'adjustment' AND doc_id = ? AND doc_line_id = ? AND status = 'active'", [$id, $l['id']]);
+                $alloc = Db::row("SELECT * FROM {allocations} WHERE tenant_id = {tid} AND doc_type = 'adjustment' AND doc_id = ? AND doc_line_id = ? AND status = 'active'", [$id, $l['id']]);
                 if (! $alloc) {
                     throw new \LogicException('Adjustment reservation missing.');
                 }
                 $r = Ledger::remove($base + ['stock_id' => (int) $alloc['stock_id'], 'qty' => -(float) $l['qty'], 'allocation_id' => (int) $alloc['id'], 'type' => 'adjust_out', 'serial_status' => 'scrapped']);
-                Db::exec('UPDATE {adjustment_lines} SET value = ? WHERE id = ?', [-$r['value'], $l['id']]);
+                Db::exec('UPDATE {adjustment_lines} SET value = ? WHERE tenant_id = {tid} AND id = ?', [-$r['value'], $l['id']]);
                 $value -= $r['value'];
             } else {
                 $lotId    = $l['lot_id'] ?: (Items::lots($item) ? Lots::resolve($item, (string) $l['lot_no'], ['expiry_date' => $l['expiry_date']], 'adjustment', $id) : null);
@@ -186,7 +186,7 @@ final class Adjustments
                 $value += (float) $l['qty'] * $unit;
             }
         }
-        Db::exec("UPDATE {adjustments} SET status = 'posted', decided_by = ?, decided_at = ?, decision_note = ? WHERE id = ?", [$approver, Db::now(), $note !== '' ? mb_substr($note, 0, 255) : null, $id]);
+        Db::exec("UPDATE {adjustments} SET status = 'posted', decided_by = ?, decided_at = ?, decision_note = ? WHERE tenant_id = {tid} AND id = ?", [$approver, Db::now(), $note !== '' ? mb_substr($note, 0, 255) : null, $id]);
         Audit::log('adjustment.post', 'adjustment', $id, null, ['net_value' => round($value, 2), 'approver' => $approver], 'success', $note);
         if ($approver) {
             Notify::user((int) $a['created_by'], 'adjustment', 'Adjustment ' . $a['number'] . ' was approved and posted', null, '/adjustments/' . $id);

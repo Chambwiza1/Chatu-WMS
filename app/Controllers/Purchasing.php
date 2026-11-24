@@ -25,8 +25,8 @@ class Purchasing extends BaseController
             $w .= ' AND p.status = ?';
             $b[] = $st;
         }
-        $rows = Db::rows("SELECT p.*, s.name supplier, w.code wh, (SELECT SUM(qty_ordered * unit_cost) FROM {po_lines} l WHERE l.po_id = p.id) value FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id
-                           JOIN {warehouses} w ON w.id = p.warehouse_id WHERE $w ORDER BY p.id DESC LIMIT 300", $b);
+        $rows = Db::rows("SELECT p.*, s.name supplier, w.code wh, (SELECT SUM(qty_ordered * unit_cost) FROM {po_lines} l WHERE l.tenant_id = {tid} AND l.po_id = p.id) value FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id
+                           JOIN {warehouses} w ON w.id = p.warehouse_id WHERE p.tenant_id = {tid} AND $w ORDER BY p.id DESC LIMIT 300", $b);
         return $this->render('purchasing/index', ['rows' => $rows, 'st' => $st], 'Purchase orders');
     }
 
@@ -60,14 +60,14 @@ class Purchasing extends BaseController
     public function show(int $id)
     {
         $po = Db::row('SELECT p.*, s.name supplier, s.phone supplier_phone, s.email supplier_email, s.address supplier_address, w.code wh, w.name wh_name, w.address wh_address, u.name created_name
-                         FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id JOIN {warehouses} w ON w.id = p.warehouse_id LEFT JOIN {users} u ON u.id = p.created_by WHERE p.id = ?', [$id]);
+                         FROM {purchase_orders} p JOIN {suppliers} s ON s.id = p.supplier_id JOIN {warehouses} w ON w.id = p.warehouse_id LEFT JOIN {users} u ON u.id = p.created_by WHERE p.tenant_id = {tid} AND p.id = ?', [$id]);
         if (! $po) {
             return $this->notFound('Purchase order');
         }
         if ($r = $this->needAny(['purchase.manage', 'receive.post', 'stock.view'], (int) $po['warehouse_id'])) {
             return $r;
         }
-        return $this->render('purchasing/show', ['po' => $po, 'lines' => P::lines($id), 'receipts' => Db::rows('SELECT * FROM {receipts} WHERE po_id = ? ORDER BY id', [$id])], $po['number']);
+        return $this->render('purchasing/show', ['po' => $po, 'lines' => P::lines($id), 'receipts' => Db::rows('SELECT * FROM {receipts} WHERE tenant_id = {tid} AND po_id = ? ORDER BY id', [$id])], $po['number']);
     }
 
     public function issue(int $id)

@@ -26,8 +26,8 @@ return [
     'SO-1 order to delivery: reserve, pick into DISPATCH, pack, dispatch at FIFO cost, proof of delivery' => static function (TestKit $t) use ($order) {
         $t->receive('LSK', [['RICE5', 10, 80], ['PHONE', 1, 1500, ['serials' => 'P1']]]);
         $so = $order($t, [['RICE5', 6], ['PHONE', 1]]);
-        $t->eq(120.0, (float) Db::value('SELECT unit_price FROM {so_lines} WHERE so_id = ? AND item_id = ?', [$so, $t->item('RICE5')]), 'price from the item');
-        $t->true((bool) Db::value("SELECT 1 FROM {notifications} n JOIN {users} u ON u.id = n.user_id WHERE u.username = 'steve' AND n.type = 'order_confirmed'"), 'the store is told');
+        $t->eq(120.0, (float) Db::value('SELECT unit_price FROM {so_lines} WHERE tenant_id = {tid} AND so_id = ? AND item_id = ?', [$so, $t->item('RICE5')]), 'price from the item');
+        $t->true((bool) Db::value("SELECT 1 FROM {notifications} n JOIN {users} u ON u.id = n.user_id WHERE n.tenant_id = {tid} AND u.username = 'steve' AND n.type = 'order_confirmed'"), 'the store is told');
         $t->as('steve');
         $sh = Shipments::create($so);
         $t->eq('in_progress', Sales::get($so)['status']);
@@ -40,7 +40,7 @@ return [
         $t->eq(4.0, $t->qty('LSK', 'RICE5'));
         $t->eq(6 * 80 + 1500.0, (float) Shipments::get($sh)['value']);
         $t->eq('dispatched', Sales::get($so)['status']);
-        $t->eq('dispatched', Db::value("SELECT status FROM {serials} WHERE serial_no = 'P1'"));
+        $t->eq('dispatched', Db::value("SELECT status FROM {serials} WHERE tenant_id = {tid} AND serial_no = 'P1'"));
         Shipments::deliver($sh, 'Mrs Banda', 'All in good order');
         $t->eq('delivered', Sales::get($so)['status']);
     },
@@ -51,7 +51,7 @@ return [
         $t->as('steve');
         $t->throws(static fn () => Shipments::create($so), 'Not enough free');
         $a = $ship($t, $so, true);
-        $t->eq(4.0, (float) Db::value('SELECT qty_shipped FROM {so_lines} WHERE so_id = ?', [$so]));
+        $t->eq(4.0, (float) Db::value('SELECT qty_shipped FROM {so_lines} WHERE tenant_id = {tid} AND so_id = ?', [$so]));
         $t->eq('in_progress', Sales::get($so)['status']);
         $t->receive('LSK', [['RICE5', 6, 90]]);
         $ship($t, $so);
@@ -66,7 +66,7 @@ return [
         $so2 = $order($t, [['MILK1', 5]], 'SHOPRITE');
         $t->as('steve');
         $t->throws(static fn () => Shipments::create($so2), 'Not enough free'); // the item itself needs 30 days
-        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE sku = 'MILK1'");
+        Db::exec("UPDATE {items} SET min_shelf_days = 0 WHERE tenant_id = {tid} AND sku = 'MILK1'");
         \App\Libraries\Master\Items::flush();
         $t->as('steve');
         Shipments::create($so2);
@@ -79,10 +79,10 @@ return [
         $sh = Shipments::create($so);
         $a  = Shipments::pickList($sh)[0];
         Shipments::pick($sh, [$a['id'] => 5]);
-        $t->eq(5.0, (float) Db::value('SELECT qty FROM {shipment_lines} WHERE shipment_id = ?', [$sh]));
+        $t->eq(5.0, (float) Db::value('SELECT qty FROM {shipment_lines} WHERE tenant_id = {tid} AND shipment_id = ?', [$sh]));
         $t->eq(5.0, $t->qty('LSK', 'RICE5', null, 'DISPATCH'));
         Shipments::cancel($sh, 'Customer will collect later');
-        $t->eq(0.0, (float) Db::value('SELECT COALESCE(SUM(qty_allocated), 0) FROM {stock}'));
+        $t->eq(0.0, (float) Db::value('SELECT COALESCE(SUM(qty_allocated), 0) FROM {stock} WHERE tenant_id = {tid}'));
         $t->eq('confirmed', Sales::get($so)['status']);
     },
 
@@ -94,7 +94,7 @@ return [
         Shipments::fail($sh, 'CLOSED', 'Shop closed for stock-take');
         $t->eq(10.0, $t->qty('LSK', 'RICE5'));
         $t->eq(800.0, $t->value('LSK', 'RICE5'));
-        $t->eq('in_stock', Db::value("SELECT status FROM {serials} WHERE serial_no = 'F1'"));
+        $t->eq('in_stock', Db::value("SELECT status FROM {serials} WHERE tenant_id = {tid} AND serial_no = 'F1'"));
         $t->eq('confirmed', Sales::get($so)['status']);
         $ship($t, $so);
         $t->eq('dispatched', Sales::get($so)['status']);
@@ -117,6 +117,6 @@ return [
         $t->throws(static fn () => Sales::cancel($so2, ''), 'Say why');
         Sales::cancel($so2, 'Customer changed mind');
         $t->eq('cancelled', Sales::get($so2)['status']);
-        $t->eq(0.0, (float) Db::value('SELECT COALESCE(SUM(qty_allocated), 0) FROM {stock}'));
+        $t->eq(0.0, (float) Db::value('SELECT COALESCE(SUM(qty_allocated), 0) FROM {stock} WHERE tenant_id = {tid}'));
     },
 ];

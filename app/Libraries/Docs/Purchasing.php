@@ -17,7 +17,7 @@ final class Purchasing
 {
     public static function get(int $id, bool $lock = false): array
     {
-        $po = Db::row('SELECT * FROM {purchase_orders} WHERE id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
+        $po = Db::row('SELECT * FROM {purchase_orders} WHERE tenant_id = {tid} AND id = ?' . ($lock ? ' FOR UPDATE' : ''), [$id]);
         if (! $po) {
             throw new BizException('Unknown purchase order.');
         }
@@ -26,7 +26,7 @@ final class Purchasing
 
     public static function lines(int $id): array
     {
-        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking, i.expiry_required FROM {po_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.po_id = ? ORDER BY l.id', [$id]);
+        return Db::rows('SELECT l.*, i.sku, i.name, i.uom, i.decimals, i.tracking, i.expiry_required FROM {po_lines} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.po_id = ? ORDER BY l.id', [$id]);
     }
 
     /** Create or replace a draft. $d: supplier_id, warehouse_id, order_date, expected_date, supplier_ref, notes, lines [[item_id, qty, unit_cost]]. */
@@ -35,7 +35,7 @@ final class Purchasing
         $wh = (int) ($d['warehouse_id'] ?? 0);
         Access::requireAt($wh, 'purchase.manage');
         $sup = (int) ($d['supplier_id'] ?? 0);
-        if (! Db::value('SELECT 1 FROM {suppliers} WHERE id = ? AND active = 1', [$sup])) {
+        if (! Db::value('SELECT 1 FROM {suppliers} WHERE tenant_id = {tid} AND id = ? AND active = 1', [$sup])) {
             throw new BizException('Choose an active supplier.');
         }
         $lines = self::cleanLines($d['lines'] ?? []);
@@ -52,8 +52,8 @@ final class Purchasing
                     throw new BizException('Only a draft can be changed. This order is ' . $po['status'] . '.');
                 }
                 Access::requireAt((int) $po['warehouse_id'], 'purchase.manage');
-                Db::exec('UPDATE {purchase_orders} SET supplier_id = ?, warehouse_id = ?, order_date = ?, expected_date = ?, supplier_ref = ?, notes = ?, currency = ?, fx_rate = ?, landed_pct = ? WHERE id = ?', array_merge(array_values($head), [$id]));
-                Db::exec('DELETE FROM {po_lines} WHERE po_id = ?', [$id]);
+                Db::exec('UPDATE {purchase_orders} SET supplier_id = ?, warehouse_id = ?, order_date = ?, expected_date = ?, supplier_ref = ?, notes = ?, currency = ?, fx_rate = ?, landed_pct = ? WHERE tenant_id = {tid} AND id = ?', array_merge(array_values($head), [$id]));
+                Db::exec('DELETE FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$id]);
             } else {
                 $id = Db::insert('purchase_orders', $head + ['number' => Numbers::next('po'), 'status' => 'draft', 'created_by' => Auth::id(), 'created_at' => Db::now()]);
             }
@@ -99,7 +99,7 @@ final class Purchasing
             if ($po['status'] !== 'draft') {
                 throw new BizException('Only a draft can be issued.');
             }
-            Db::exec("UPDATE {purchase_orders} SET status = 'open', issued_by = ?, issued_at = ? WHERE id = ?", [Auth::id(), Db::now(), $id]);
+            Db::exec("UPDATE {purchase_orders} SET status = 'open', issued_by = ?, issued_at = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), $id]);
             Audit::log('po.issue', 'purchase_order', $id);
         });
     }
@@ -114,7 +114,7 @@ final class Purchasing
                 throw new BizException('This order is already ' . $po['status'] . '.');
             }
             $to = $po['status'] === 'partly_received' ? 'closed' : 'cancelled';
-            Db::exec('UPDATE {purchase_orders} SET status = ?, notes = CONCAT(COALESCE(notes, \'\'), ?) WHERE id = ?', [$to, "\n" . ucfirst($to) . ': ' . mb_substr($why, 0, 200), $id]);
+            Db::exec('UPDATE {purchase_orders} SET status = ?, notes = CONCAT(COALESCE(notes, \'\'), ?) WHERE tenant_id = {tid} AND id = ?', [$to, "\n" . ucfirst($to) . ': ' . mb_substr($why, 0, 200), $id]);
             Audit::log('po.' . $to, 'purchase_order', $id, ['status' => $po['status']], ['status' => $to], 'success', $why);
         });
     }
@@ -122,9 +122,9 @@ final class Purchasing
     /** Called by receipts: add received quantities and move the order on. */
     public static function received(int $poId): void
     {
-        $open = (float) Db::value('SELECT COALESCE(SUM(GREATEST(qty_ordered - qty_received, 0)), 0) FROM {po_lines} WHERE po_id = ?', [$poId]);
-        $any  = (float) Db::value('SELECT COALESCE(SUM(qty_received), 0) FROM {po_lines} WHERE po_id = ?', [$poId]);
+        $open = (float) Db::value('SELECT COALESCE(SUM(GREATEST(qty_ordered - qty_received, 0)), 0) FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$poId]);
+        $any  = (float) Db::value('SELECT COALESCE(SUM(qty_received), 0) FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$poId]);
         $st   = $open <= Ledger::EPS ? 'received' : ($any > Ledger::EPS ? 'partly_received' : 'open');
-        Db::exec('UPDATE {purchase_orders} SET status = ? WHERE id = ?', [$st, $poId]);
+        Db::exec('UPDATE {purchase_orders} SET status = ? WHERE tenant_id = {tid} AND id = ?', [$st, $poId]);
     }
 }

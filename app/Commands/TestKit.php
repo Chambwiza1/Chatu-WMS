@@ -42,7 +42,7 @@ final class TestKit
 
     public function bin(string $wh, string $code): int
     {
-        return $this->c['bin'][$wh . ':' . $code] ?? (int) Db::value('SELECT b.id FROM {bins} b JOIN {warehouses} w ON w.id = b.warehouse_id WHERE w.code = ? AND b.code = ?', [$wh, $code]);
+        return $this->c['bin'][$wh . ':' . $code] ?? (int) Db::value('SELECT b.id FROM {bins} b JOIN {warehouses} w ON w.id = b.warehouse_id WHERE b.tenant_id = {tid} AND w.code = ? AND b.code = ?', [$wh, $code]);
     }
 
     public function eq($expected, $actual, string $msg = ''): void
@@ -94,12 +94,12 @@ final class TestKit
             $w .= ' AND bin_id = ?';
             $b[] = $this->bin($wh, $bin);
         }
-        return (float) Db::value("SELECT COALESCE(SUM(qty), 0) FROM {stock} WHERE $w", $b);
+        return (float) Db::value("SELECT COALESCE(SUM(qty), 0) FROM {stock} WHERE tenant_id = {tid} AND $w", $b);
     }
 
     public function value(string $wh, string $sku): float
     {
-        return (float) Db::value('SELECT COALESCE(SUM(qty_left * unit_cost), 0) FROM {cost_layers} WHERE warehouse_id = ? AND item_id = ?', [$this->wh($wh), $this->item($sku)]);
+        return (float) Db::value('SELECT COALESCE(SUM(qty_left * unit_cost), 0) FROM {cost_layers} WHERE tenant_id = {tid} AND warehouse_id = ? AND item_id = ?', [$this->wh($wh), $this->item($sku)]);
     }
 
     /** Stock row id of an item at a bin (optionally a batch number or serial). */
@@ -115,7 +115,7 @@ final class TestKit
             $w .= ' AND se.serial_no = ?';
             $b[] = $serial;
         }
-        $id = Db::value("SELECT s.id FROM {stock} s LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE $w ORDER BY s.id LIMIT 1", $b);
+        $id = Db::value("SELECT s.id FROM {stock} s LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE s.tenant_id = {tid} AND $w ORDER BY s.id LIMIT 1", $b);
         if (! $id) {
             throw new RuntimeException("No stock row for $sku at $wh/$bin" . ($lot ? " batch $lot" : '') . ($serial ? " serial $serial" : ''));
         }

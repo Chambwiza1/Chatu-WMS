@@ -20,7 +20,7 @@ final class Parties
         if (! isset(self::FIELDS[$table])) {
             throw new BizException('Unknown list.');
         }
-        Access::require($table === 'suppliers' ? 'supplier.manage' : 'customer.manage');
+        Access::requireSave($table === 'suppliers' ? 'supplier' : 'customer', $id === null, $id !== null && isset($d['active']) && ! $d['active']);
         $code = strtoupper(trim((string) ($d['code'] ?? '')));
         if (! preg_match('/^[A-Z0-9._-]{1,30}$/', $code)) {
             throw new BizException('Code: letters, numbers, dot and dash; up to 30 characters.');
@@ -45,12 +45,12 @@ final class Parties
         }
         $row['code'] = $code;
         return Db::atomic(static function () use ($table, $row, $id, $code) {
-            if (Db::value("SELECT id FROM {{$table}} WHERE code = ? AND id <> ?", [$code, $id ?? 0])) {
+            if (Db::value("SELECT id FROM {{$table}} WHERE tenant_id = {tid} AND code = ? AND id <> ?", [$code, $id ?? 0])) {
                 throw new BizException('Code ' . $code . ' is already used.');
             }
             if ($id) {
                 $sets = implode(', ', array_map(static fn ($k) => "$k = ?", array_keys($row)));
-                Db::exec("UPDATE {{$table}} SET $sets WHERE id = ?", array_merge(array_values($row), [$id]));
+                Db::exec("UPDATE {{$table}} SET $sets WHERE tenant_id = {tid} AND id = ?", array_merge(array_values($row), [$id]));
                 Audit::log(rtrim($table, 's') . '.update', rtrim($table, 's'), $id, null, $row);
             } else {
                 $id = Db::insert($table, $row + ['created_at' => Db::now()]);
@@ -62,7 +62,7 @@ final class Parties
 
     public static function get(string $table, int $id): array
     {
-        $r = Db::row("SELECT * FROM {{$table}} WHERE id = ?", [$id]);
+        $r = Db::row("SELECT * FROM {{$table}} WHERE tenant_id = {tid} AND id = ?", [$id]);
         if (! $r) {
             throw new BizException('Not found.');
         }
@@ -71,6 +71,6 @@ final class Parties
 
     public static function options(string $table): array
     {
-        return Db::rows("SELECT id, code, name FROM {{$table}} WHERE active = 1 ORDER BY name");
+        return Db::rows("SELECT id, code, name FROM {{$table}} WHERE tenant_id = {tid} AND active = 1 ORDER BY name");
     }
 }

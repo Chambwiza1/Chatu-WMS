@@ -37,9 +37,9 @@ class Orders extends BaseController
             $w .= ' AND (so.number LIKE ? OR c.name LIKE ? OR so.customer_ref LIKE ?)';
             $b = array_merge($b, ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%']);
         }
-        $rows = Db::rows("SELECT so.*, c.name customer, w.code wh, (SELECT SUM(l.qty * l.unit_price) FROM {so_lines} l WHERE l.so_id = so.id) amount,
-                                (SELECT SUM(l.qty) FROM {so_lines} l WHERE l.so_id = so.id) q, (SELECT SUM(l.qty_shipped) FROM {so_lines} l WHERE l.so_id = so.id) s
-                           FROM {sales_orders} so JOIN {customers} c ON c.id = so.customer_id JOIN {warehouses} w ON w.id = so.warehouse_id WHERE $w ORDER BY so.id DESC LIMIT 300", $b);
+        $rows = Db::rows("SELECT so.*, c.name customer, w.code wh, (SELECT SUM(l.qty * l.unit_price) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) amount,
+                                (SELECT SUM(l.qty) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) q, (SELECT SUM(l.qty_shipped) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) s
+                           FROM {sales_orders} so JOIN {customers} c ON c.id = so.customer_id JOIN {warehouses} w ON w.id = so.warehouse_id WHERE so.tenant_id = {tid} AND $w ORDER BY so.id DESC LIMIT 300", $b);
         return $this->render('orders/index', ['rows' => $rows, 'st' => $st, 'q' => $q], 'Sales orders');
     }
 
@@ -73,7 +73,7 @@ class Orders extends BaseController
     public function show(int $id)
     {
         $so = Db::row('SELECT so.*, c.name customer, c.phone, c.town, c.code customer_code, w.code wh, w.name wh_name, u.name created_name FROM {sales_orders} so JOIN {customers} c ON c.id = so.customer_id
-                         JOIN {warehouses} w ON w.id = so.warehouse_id LEFT JOIN {users} u ON u.id = so.created_by WHERE so.id = ?', [$id]);
+                         JOIN {warehouses} w ON w.id = so.warehouse_id LEFT JOIN {users} u ON u.id = so.created_by WHERE so.tenant_id = {tid} AND so.id = ?', [$id]);
         if (! $so) {
             return $this->notFound('Order');
         }
@@ -83,10 +83,10 @@ class Orders extends BaseController
         }
         $lines = Sales::lines($id);
         foreach ($lines as &$l) {
-            $l['on_ship'] = (float) Db::value("SELECT COALESCE(SUM(sl.qty), 0) FROM {shipment_lines} sl JOIN {shipments} s ON s.id = sl.shipment_id WHERE sl.so_line_id = ? AND s.status IN ('allocated','picked','packed')", [$l['id']]);
+            $l['on_ship'] = (float) Db::value("SELECT COALESCE(SUM(sl.qty), 0) FROM {shipment_lines} sl JOIN {shipments} s ON s.id = sl.shipment_id WHERE sl.tenant_id = {tid} AND sl.so_line_id = ? AND s.status IN ('allocated','picked','packed')", [$l['id']]);
             $l['free']    = \App\Libraries\Stock\Alloc::free($wh, (int) $l['item_id']);
         }
-        return $this->render('orders/show', ['so' => $so, 'lines' => $lines, 'shipments' => Db::rows('SELECT * FROM {shipments} WHERE so_id = ? ORDER BY id', [$id])], $so['number']);
+        return $this->render('orders/show', ['so' => $so, 'lines' => $lines, 'shipments' => Db::rows('SELECT * FROM {shipments} WHERE tenant_id = {tid} AND so_id = ? ORDER BY id', [$id])], $so['number']);
     }
 
     public function step(int $id, string $what)
@@ -129,7 +129,7 @@ class Orders extends BaseController
             $b[] = $st;
         }
         $rows = Db::rows("SELECT s.*, so.number order_no, c.name customer, c.town, t.number trip_no FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id
-                           LEFT JOIN {trips} t ON t.id = s.trip_id WHERE $w ORDER BY FIELD(s.status, 'allocated','picked','packed','dispatched','delivered','failed','cancelled'), s.id DESC LIMIT 300", $b);
+                           LEFT JOIN {trips} t ON t.id = s.trip_id WHERE s.tenant_id = {tid} AND $w ORDER BY FIELD(s.status, 'allocated','picked','packed','dispatched','delivered','failed','cancelled'), s.id DESC LIMIT 300", $b);
         return $this->render('orders/shipments', ['rows' => $rows, 'st' => $st, 'wh' => $wh], 'Pick, pack, dispatch');
     }
 
@@ -137,7 +137,7 @@ class Orders extends BaseController
     {
         $s = Db::row('SELECT s.*, so.number order_no, so.customer_ref, so.delivery_address, so.id so_id, c.name customer, c.phone, c.town, w.code wh, w.name wh_name, t.number trip_no
                         FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id JOIN {warehouses} w ON w.id = s.warehouse_id
-                        LEFT JOIN {trips} t ON t.id = s.trip_id WHERE s.id = ?', [$id]);
+                        LEFT JOIN {trips} t ON t.id = s.trip_id WHERE s.tenant_id = {tid} AND s.id = ?', [$id]);
         if (! $s) {
             return $this->notFound('Shipment');
         }
@@ -145,17 +145,17 @@ class Orders extends BaseController
             return $r;
         }
         return $this->render('orders/shipment', ['s' => $s, 'lines' => Shipments::lines($id), 'picks' => Shipments::pickList($id), 'units' => Shipments::units($id),
-            'files' => Db::rows("SELECT * FROM {attachments} WHERE owner_type = 'shipment' AND owner_id = ?", [$id]),
-            'returns' => Db::rows('SELECT r.*, u.name user FROM {customer_returns} r LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.shipment_id = ? ORDER BY r.id', [$id]),
-            'failReasons' => Db::rows("SELECT * FROM {reasons} WHERE use_for = 'failed_delivery' AND active = 1 ORDER BY label"),
-            'returnReasons' => Db::rows("SELECT * FROM {reasons} WHERE use_for = 'customer_return' AND active = 1 ORDER BY label")], $s['number']);
+            'files' => Db::rows("SELECT * FROM {attachments} WHERE tenant_id = {tid} AND owner_type = 'shipment' AND owner_id = ?", [$id]),
+            'returns' => Db::rows('SELECT r.*, u.name user FROM {customer_returns} r LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.tenant_id = {tid} AND r.shipment_id = ? ORDER BY r.id', [$id]),
+            'failReasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'failed_delivery' AND active = 1 ORDER BY label"),
+            'returnReasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'customer_return' AND active = 1 ORDER BY label")], $s['number']);
     }
 
     public function deliveryNote(int $id)
     {
         $s = Db::row('SELECT s.*, so.number order_no, so.customer_ref, so.delivery_address, c.name customer, c.phone, c.town, w.code wh, w.name wh_name, w.address wh_address, t.number trip_no, v.reg_no, d.name driver
                         FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id JOIN {warehouses} w ON w.id = s.warehouse_id
-                        LEFT JOIN {trips} t ON t.id = s.trip_id LEFT JOIN {vehicles} v ON v.id = t.vehicle_id LEFT JOIN {drivers} d ON d.id = t.driver_id WHERE s.id = ?', [$id]);
+                        LEFT JOIN {trips} t ON t.id = s.trip_id LEFT JOIN {vehicles} v ON v.id = t.vehicle_id LEFT JOIN {drivers} d ON d.id = t.driver_id WHERE s.tenant_id = {tid} AND s.id = ?', [$id]);
         if (! $s) {
             return $this->notFound('Shipment');
         }
@@ -247,7 +247,7 @@ class Orders extends BaseController
 
     public function file(int $id)
     {
-        $a = Db::row('SELECT a.*, s.warehouse_id FROM {attachments} a JOIN {shipments} s ON s.id = a.owner_id WHERE a.id = ? AND a.owner_type = \'shipment\'', [$id]);
+        $a = Db::row('SELECT a.*, s.warehouse_id FROM {attachments} a JOIN {shipments} s ON s.id = a.owner_id WHERE a.tenant_id = {tid} AND a.id = ? AND a.owner_type = \'shipment\'', [$id]);
         if (! $a) {
             return $this->notFound('File');
         }

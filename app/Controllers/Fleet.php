@@ -20,10 +20,10 @@ class Fleet extends BaseController
             return $this->need('fleet.manage');
         }
         return $this->render('fleet/index', [
-            'vehicles' => Db::rows("SELECT v.*, w.code home, (SELECT t.number FROM {trips} t WHERE t.vehicle_id = v.id AND t.status = 'on_road' LIMIT 1) trip FROM {vehicles} v LEFT JOIN {warehouses} w ON w.id = v.home_warehouse_id ORDER BY v.status = 'retired', v.reg_no"),
-            'drivers'  => Db::rows("SELECT d.*, (SELECT t.number FROM {trips} t WHERE t.driver_id = d.id AND t.status = 'on_road' LIMIT 1) trip FROM {drivers} d ORDER BY d.status, d.name"),
-            'trips'    => Db::rows("SELECT t.*, v.reg_no, d.name driver, w.code wh, (SELECT COUNT(*) FROM {trip_stops} s WHERE s.trip_id = t.id) stops FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id JOIN {drivers} d ON d.id = t.driver_id
-                                     JOIN {warehouses} w ON w.id = t.warehouse_id WHERE t.status IN ('planned','on_road') ORDER BY t.planned_date, t.id"),
+            'vehicles' => Db::rows("SELECT v.*, w.code home, (SELECT t.number FROM {trips} t WHERE t.tenant_id = {tid} AND t.vehicle_id = v.id AND t.status = 'on_road' LIMIT 1) trip FROM {vehicles} v LEFT JOIN {warehouses} w ON w.id = v.home_warehouse_id WHERE v.tenant_id = {tid} ORDER BY v.status = 'retired', v.reg_no"),
+            'drivers'  => Db::rows("SELECT d.*, (SELECT t.number FROM {trips} t WHERE t.tenant_id = {tid} AND t.driver_id = d.id AND t.status = 'on_road' LIMIT 1) trip FROM {drivers} d WHERE d.tenant_id = {tid} ORDER BY d.status, d.name"),
+            'trips'    => Db::rows("SELECT t.*, v.reg_no, d.name driver, w.code wh, (SELECT COUNT(*) FROM {trip_stops} s WHERE s.tenant_id = {tid} AND s.trip_id = t.id) stops FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id JOIN {drivers} d ON d.id = t.driver_id
+                                     JOIN {warehouses} w ON w.id = t.warehouse_id WHERE t.tenant_id = {tid} AND t.status IN ('planned','on_road') ORDER BY t.planned_date, t.id"),
             'expiring' => F::expiring(),
         ], 'Fleet and trips');
     }
@@ -62,13 +62,13 @@ class Fleet extends BaseController
         if (! $this->canSee()) {
             return $this->need('fleet.manage');
         }
-        $v = $id ? Db::row('SELECT * FROM {vehicles} WHERE id = ?', [$id]) : null;
+        $v = $id ? Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ?', [$id]) : null;
         if ($id && ! $v) {
             return $this->notFound('Vehicle');
         }
         return $this->render('fleet/vehicle', ['v' => $v, 'warehouses' => Warehouses::all(),
-            'logs' => $id ? Db::rows('SELECT g.*, u.name user, t.number trip FROM {vehicle_logs} g LEFT JOIN {users} u ON u.id = g.user_id LEFT JOIN {trips} t ON t.id = g.trip_id WHERE g.vehicle_id = ? ORDER BY g.on_date DESC, g.id DESC LIMIT 50', [$id]) : [],
-            'trips' => $id ? Db::rows('SELECT t.*, d.name driver FROM {trips} t JOIN {drivers} d ON d.id = t.driver_id WHERE t.vehicle_id = ? ORDER BY t.id DESC LIMIT 20', [$id]) : []], $v ? $v['reg_no'] : 'New vehicle');
+            'logs' => $id ? Db::rows('SELECT g.*, u.name user, t.number trip FROM {vehicle_logs} g LEFT JOIN {users} u ON u.id = g.user_id LEFT JOIN {trips} t ON t.id = g.trip_id WHERE g.tenant_id = {tid} AND g.vehicle_id = ? ORDER BY g.on_date DESC, g.id DESC LIMIT 50', [$id]) : [],
+            'trips' => $id ? Db::rows('SELECT t.*, d.name driver FROM {trips} t JOIN {drivers} d ON d.id = t.driver_id WHERE t.tenant_id = {tid} AND t.vehicle_id = ? ORDER BY t.id DESC LIMIT 20', [$id]) : []], $v ? $v['reg_no'] : 'New vehicle');
     }
 
     public function vehicleSave(?int $id = null)
@@ -92,12 +92,12 @@ class Fleet extends BaseController
         if (! $this->canSee()) {
             return $this->need('fleet.manage');
         }
-        $d = $id ? Db::row('SELECT * FROM {drivers} WHERE id = ?', [$id]) : null;
+        $d = $id ? Db::row('SELECT * FROM {drivers} WHERE tenant_id = {tid} AND id = ?', [$id]) : null;
         if ($id && ! $d) {
             return $this->notFound('Driver');
         }
         return $this->render('fleet/driver', ['d' => $d, 'users' => Db::rows('SELECT id, name FROM {users} WHERE active = 1 ORDER BY name'),
-            'trips' => $id ? Db::rows('SELECT t.*, v.reg_no FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id WHERE t.driver_id = ? ORDER BY t.id DESC LIMIT 20', [$id]) : []], $d ? $d['name'] : 'New driver');
+            'trips' => $id ? Db::rows('SELECT t.*, v.reg_no FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id WHERE t.tenant_id = {tid} AND t.driver_id = ? ORDER BY t.id DESC LIMIT 20', [$id]) : []], $d ? $d['name'] : 'New driver');
     }
 
     public function driverSave(?int $id = null)
@@ -115,8 +115,8 @@ class Fleet extends BaseController
         }
         $st = (string) $this->request->getGet('status');
         $w  = $st !== '' ? 't.status = ?' : '1=1';
-        $rows = Db::rows("SELECT t.*, v.reg_no, d.name driver, w.code wh, (SELECT COUNT(*) FROM {trip_stops} s WHERE s.trip_id = t.id) stops FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id
-                           JOIN {drivers} d ON d.id = t.driver_id JOIN {warehouses} w ON w.id = t.warehouse_id WHERE $w ORDER BY t.id DESC LIMIT 300", $st !== '' ? [$st] : []);
+        $rows = Db::rows("SELECT t.*, v.reg_no, d.name driver, w.code wh, (SELECT COUNT(*) FROM {trip_stops} s WHERE s.tenant_id = {tid} AND s.trip_id = t.id) stops FROM {trips} t JOIN {vehicles} v ON v.id = t.vehicle_id
+                           JOIN {drivers} d ON d.id = t.driver_id JOIN {warehouses} w ON w.id = t.warehouse_id WHERE t.tenant_id = {tid} AND $w ORDER BY t.id DESC LIMIT 300", $st !== '' ? [$st] : []);
         return $this->render('fleet/trips', ['rows' => $rows, 'st' => $st], 'Trips');
     }
 
@@ -127,10 +127,10 @@ class Fleet extends BaseController
         }
         $wh = $this->wh('stock.view') ?: (int) (Warehouses::all()[0]['id'] ?? 0);
         return $this->render('fleet/trip_form', ['wh' => $wh, 'warehouses' => Warehouses::all(),
-            'vehicles' => Db::rows("SELECT * FROM {vehicles} WHERE status = 'available' ORDER BY reg_no"), 'drivers' => Db::rows("SELECT * FROM {drivers} WHERE status = 'active' ORDER BY name"),
+            'vehicles' => Db::rows("SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND status = 'available' ORDER BY reg_no"), 'drivers' => Db::rows("SELECT * FROM {drivers} WHERE tenant_id = {tid} AND status = 'active' ORDER BY name"),
             'shipments' => Db::rows("SELECT s.*, so.number order_no, c.name customer, c.town FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id
-                                     WHERE s.warehouse_id = ? AND s.status IN ('allocated','picked','packed') AND s.trip_id IS NULL ORDER BY c.town, s.id", [$wh]),
-            'transfers' => Db::rows("SELECT t.*, w.code to_code FROM {transfers} t JOIN {warehouses} w ON w.id = t.to_warehouse_id WHERE t.from_warehouse_id = ? AND t.status IN ('draft','allocated') AND t.trip_id IS NULL ORDER BY t.id", [$wh])], 'Plan a trip');
+                                     WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND s.status IN ('allocated','picked','packed') AND s.trip_id IS NULL ORDER BY c.town, s.id", [$wh]),
+            'transfers' => Db::rows("SELECT t.*, w.code to_code FROM {transfers} t JOIN {warehouses} w ON w.id = t.to_warehouse_id WHERE t.tenant_id = {tid} AND t.from_warehouse_id = ? AND t.status IN ('draft','allocated') AND t.trip_id IS NULL ORDER BY t.id", [$wh])], 'Plan a trip');
     }
 
     public function tripPlan()
@@ -147,15 +147,15 @@ class Fleet extends BaseController
             return $this->need('fleet.manage');
         }
         $t = Db::row('SELECT t.*, v.reg_no, v.make, v.model, v.capacity_kg, v.odometer_km, d.name driver, d.phone driver_phone, d.licence_no, w.code wh, w.name wh_name FROM {trips} t
-                        JOIN {vehicles} v ON v.id = t.vehicle_id JOIN {drivers} d ON d.id = t.driver_id JOIN {warehouses} w ON w.id = t.warehouse_id WHERE t.id = ?', [$id]);
+                        JOIN {vehicles} v ON v.id = t.vehicle_id JOIN {drivers} d ON d.id = t.driver_id JOIN {warehouses} w ON w.id = t.warehouse_id WHERE t.tenant_id = {tid} AND t.id = ?', [$id]);
         if (! $t) {
             return $this->notFound('Trip');
         }
         $stops = Db::rows("SELECT ts.*, COALESCE(s.number, tr.number) number, COALESCE(s.status, tr.status) doc_status, c.name customer, c.town, so.delivery_address, tw.code to_code, s.packages
                              FROM {trip_stops} ts LEFT JOIN {shipments} s ON ts.kind = 'shipment' AND s.id = ts.doc_id LEFT JOIN {sales_orders} so ON so.id = s.so_id LEFT JOIN {customers} c ON c.id = so.customer_id
-                             LEFT JOIN {transfers} tr ON ts.kind = 'transfer' AND tr.id = ts.doc_id LEFT JOIN {warehouses} tw ON tw.id = tr.to_warehouse_id WHERE ts.trip_id = ? ORDER BY ts.seq", [$id]);
+                             LEFT JOIN {transfers} tr ON ts.kind = 'transfer' AND tr.id = ts.doc_id LEFT JOIN {warehouses} tw ON tw.id = tr.to_warehouse_id WHERE ts.tenant_id = {tid} AND ts.trip_id = ? ORDER BY ts.seq", [$id]);
         return $this->render('fleet/trip', ['t' => $t, 'stops' => $stops, 'load' => F::load($id), 'blockers' => $t['status'] === 'planned' ? F::blockers((int) $t['vehicle_id'], (int) $t['driver_id'], date('Y-m-d')) : [],
-            'more' => $t['status'] === 'planned' ? Db::rows("SELECT s.id, s.number, c.name customer FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id WHERE s.warehouse_id = ? AND s.status IN ('allocated','picked','packed') AND s.trip_id IS NULL", [$t['warehouse_id']]) : []], $t['number']);
+            'more' => $t['status'] === 'planned' ? Db::rows("SELECT s.id, s.number, c.name customer FROM {shipments} s JOIN {sales_orders} so ON so.id = s.so_id JOIN {customers} c ON c.id = so.customer_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND s.status IN ('allocated','picked','packed') AND s.trip_id IS NULL", [$t['warehouse_id']]) : []], $t['number']);
     }
 
     public function tripAct(int $id, string $what)

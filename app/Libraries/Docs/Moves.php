@@ -30,7 +30,7 @@ final class Moves
                     if ($q <= 0) {
                         continue;
                     }
-                    $row = Db::row('SELECT * FROM {stock} WHERE id = ?', [(int) ($l['stock_id'] ?? 0)]);
+                    $row = Db::row('SELECT * FROM {stock} WHERE tenant_id = {tid} AND id = ?', [(int) ($l['stock_id'] ?? 0)]);
                     if (! $row || (int) $row['warehouse_id'] !== $wh) {
                         throw new BizException('That stock is not in this warehouse (it may have moved). Refresh and try again.');
                     }
@@ -57,7 +57,7 @@ final class Moves
                     ]);
                 }
                 $kind = count(array_unique($kinds)) === 1 ? $kinds[0] : 'move';
-                Db::exec('UPDATE {moves} SET kind = ? WHERE id = ?', [$kind, $mid]);
+                Db::exec('UPDATE {moves} SET kind = ? WHERE tenant_id = {tid} AND id = ?', [$kind, $mid]);
                 Audit::log('move.post', 'move', $mid, null, ['warehouse_id' => $wh, 'lines' => count($lines), 'kind' => $kind]);
                 return $mid;
             });
@@ -67,7 +67,7 @@ final class Moves
     /** Put away everything in RECEIVING for one item/row to a bin: convenience used by the put-away screen. */
     public static function putaway(int $stockId, int $toBin, ?float $qty = null, ?string $token = null): int
     {
-        $row = Db::row('SELECT * FROM {stock} WHERE id = ?', [$stockId]);
+        $row = Db::row('SELECT * FROM {stock} WHERE tenant_id = {tid} AND id = ?', [$stockId]);
         if (! $row) {
             throw new BizException('That stock has already moved.');
         }

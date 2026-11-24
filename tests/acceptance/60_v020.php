@@ -53,13 +53,13 @@ return [
         $t->as('bella');
         $po = Purchasing::saveDraft(['supplier_id' => $t->c['supplier']['ZAMMILL'], 'warehouse_id' => $t->wh('LSK'), 'lines' => [$line]]);
         Purchasing::issue($po);
-        $pl = Db::row('SELECT * FROM {po_lines} WHERE po_id = ?', [$po]);
+        $pl = Db::row('SELECT * FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$po]);
         $t->eq(30.0, (float) $pl['qty_ordered']);
         $t->eq('carton', $pl['pack_unit']);
         $t->eq(10.0, (float) $pl['pack_factor']);
         $t->as('steve');
         $rid = Receipts::post(['warehouse_id' => $t->wh('LSK'), 'po_id' => $po, 'lines' => [['po_line_id' => (int) $pl['id'], 'qty_accepted' => 30]]]);
-        $t->eq('carton', Db::value('SELECT pack_unit FROM {receipt_lines} WHERE receipt_id = ?', [$rid]), 'the receipt keeps the ordered pack for display');
+        $t->eq('carton', Db::value('SELECT pack_unit FROM {receipt_lines} WHERE tenant_id = {tid} AND receipt_id = ?', [$rid]), 'the receipt keeps the ordered pack for display');
         $t->eq(30.0, $t->qty('LSK', 'RICE5'));
         $t->eq(2400.0, $t->value('LSK', 'RICE5'));
     },
@@ -71,7 +71,7 @@ return [
         $line = Items::convertLine(['item_id' => $t->item('RICE5'), 'unit' => 'carton', 'qty' => 2, 'unit_price' => 1150]);
         $so = Sales::saveDraft(['customer_id' => $t->c['customer']['SHOPRITE'], 'warehouse_id' => $t->wh('LSK'), 'lines' => [$line]]);
         Sales::confirm($so);
-        $l = Db::row('SELECT * FROM {so_lines} WHERE so_id = ?', [$so]);
+        $l = Db::row('SELECT * FROM {so_lines} WHERE tenant_id = {tid} AND so_id = ?', [$so]);
         $t->eq(20.0, (float) $l['qty']);
         $t->eq(115.0, (float) $l['unit_price']);
         $t->eq('carton', $l['pack_unit']);
@@ -79,7 +79,7 @@ return [
         $sh = Shipments::create($so);
         Shipments::pick($sh);
         $t->eq(20.0, $t->qty('LSK', 'RICE5', null, 'DISPATCH'));
-        $t->eq(10.0, (float) Db::value('SELECT pack_factor FROM {so_lines} WHERE so_id = ?', [$so]));
+        $t->eq(10.0, (float) Db::value('SELECT pack_factor FROM {so_lines} WHERE tenant_id = {tid} AND so_id = ?', [$so]));
     },
 
     'FX-1 a PO in US dollars with landed cost: stock is valued at cost × rate × (1 + landed %), the actual rate can be given on the day' => static function (TestKit $t) {
@@ -95,23 +95,23 @@ return [
         $po = Purchasing::saveDraft($base + ['currency' => 'usd', 'fx_rate' => '27.5', 'landed_pct' => 10]);
         Purchasing::issue($po);
         $t->eq('USD', Purchasing::get($po)['currency']);
-        $pl = (int) Db::value('SELECT id FROM {po_lines} WHERE po_id = ?', [$po]);
+        $pl = (int) Db::value('SELECT id FROM {po_lines} WHERE tenant_id = {tid} AND po_id = ?', [$po]);
         $t->as('steve');
         $r1 = Receipts::post(['warehouse_id' => $t->wh('LSK'), 'po_id' => $po, 'lines' => [['po_line_id' => $pl, 'qty_accepted' => 5]]]);
-        $l1 = Db::row('SELECT * FROM {receipt_lines} WHERE receipt_id = ?', [$r1]);
+        $l1 = Db::row('SELECT * FROM {receipt_lines} WHERE tenant_id = {tid} AND receipt_id = ?', [$r1]);
         $t->eq(90.75, (float) $l1['unit_cost'], '3 × 27.5 × 1.10');
         $t->eq(3.0, (float) $l1['unit_cost_fc']);
-        $t->eq('USD', Db::value('SELECT currency FROM {receipts} WHERE id = ?', [$r1]));
+        $t->eq('USD', Db::value('SELECT currency FROM {receipts} WHERE tenant_id = {tid} AND id = ?', [$r1]));
         $r2 = Receipts::post(['warehouse_id' => $t->wh('LSK'), 'po_id' => $po, 'fx_rate' => 28, 'lines' => [['po_line_id' => $pl, 'qty_accepted' => 5]]]);
-        $t->eq(92.4, (float) Db::value('SELECT unit_cost FROM {receipt_lines} WHERE receipt_id = ?', [$r2]), 'the rate on the day');
-        $t->eq(28.0, (float) Db::value('SELECT fx_rate FROM {receipts} WHERE id = ?', [$r2]));
+        $t->eq(92.4, (float) Db::value('SELECT unit_cost FROM {receipt_lines} WHERE tenant_id = {tid} AND receipt_id = ?', [$r2]), 'the rate on the day');
+        $t->eq(28.0, (float) Db::value('SELECT fx_rate FROM {receipts} WHERE tenant_id = {tid} AND id = ?', [$r2]));
         $t->eq(round(5 * 90.75 + 5 * 92.4, 2), round($t->value('LSK', 'RICE5'), 2));
-        $t->eq(92.4, (float) Db::value('SELECT last_cost FROM {items} WHERE id = ?', [$t->item('RICE5')]), 'last cost is in kwacha');
+        $t->eq(92.4, (float) Db::value('SELECT last_cost FROM {items} WHERE tenant_id = {tid} AND id = ?', [$t->item('RICE5')]), 'last cost is in kwacha');
 
         // a receipt without a PO may carry its own currency; opening stock never does
         $r3 = Receipts::post(['warehouse_id' => $t->wh('LSK'), 'supplier_id' => $t->c['supplier']['TECH'], 'currency' => 'ZAR', 'fx_rate' => 1.5, 'landed_pct' => 0,
             'lines' => [['item_id' => $t->item('SUGAR'), 'qty_accepted' => 10, 'unit_cost' => 12, 'bin_id' => $t->bin('LSK', 'STOCK')]]]);
-        $t->eq(18.0, (float) Db::value('SELECT unit_cost FROM {receipt_lines} WHERE receipt_id = ?', [$r3]));
+        $t->eq(18.0, (float) Db::value('SELECT unit_cost FROM {receipt_lines} WHERE tenant_id = {tid} AND receipt_id = ?', [$r3]));
     },
 
     'WAVE-1 two shipments picked in one walk; a short pick shortens only its shipment; rules on what can be waved' => static function (TestKit $t) use ($order) {
@@ -125,7 +125,7 @@ return [
         $c = Shipments::create($soC);
         $wh = $t->wh('LSK');
         $t->throws(static fn () => Waves::create($wh, [$a]), 'at least two');
-        $t->throws(static fn () => Waves::create($t->wh('KTW'), [$a, $b]), 'outside your area', DeniedException::class);
+        $t->throws(static fn () => Waves::create($t->wh('KTW'), [$a, $b]), 'not one of yours', DeniedException::class);
         $t->as('kalo');
         $t->throws(static fn () => Waves::create($t->wh('KTW'), [$a, $b]), 'another warehouse');
         $t->as('steve');
@@ -149,7 +149,7 @@ return [
         $t->eq('picked', Shipments::get($a)['status']);
         $t->eq('picked', Shipments::get($b)['status']);
         $t->eq(16.0, $t->qty('LSK', 'RICE5', null, 'DISPATCH'), '10 for A and 6 found for B');
-        $t->eq(6.0, (float) Db::value('SELECT qty_picked FROM {shipment_lines} WHERE shipment_id = ?', [$b]));
+        $t->eq(6.0, (float) Db::value('SELECT qty_picked FROM {shipment_lines} WHERE tenant_id = {tid} AND shipment_id = ?', [$b]));
         $t->throws(static fn () => Waves::confirm($w), 'already picked');
         $t->eq('allocated', Shipments::get($c)['status'], 'C was not in the wave');
     },
@@ -174,7 +174,7 @@ return [
         $w2 = Waves::create($wh, [$s[1], $s[2], $s[3]]);
         Waves::cancel($w2);
         $t->eq('cancelled', Waves::get($w2)['status']);
-        $t->eq(0, (int) Db::value('SELECT COUNT(*) FROM {shipments} WHERE wave_id = ?', [$w2]));
+        $t->eq(0, (int) Db::value('SELECT COUNT(*) FROM {shipments} WHERE tenant_id = {tid} AND wave_id = ?', [$w2]));
         $t->throws(static fn () => Waves::confirm($w2), 'already cancelled');
         $w3 = Waves::create($wh, [$s[1], $s[2]]);
         Waves::confirm($w3);
@@ -216,13 +216,13 @@ return [
         $t->throws(static fn () => AssetsImport::apply($rows, true), 'permission', DeniedException::class);
         $t->as('tom');
         $t->eq([1, 1, 3], AssetsImport::apply($rows, true, $t->wh('LSK')));
-        $v = Db::row('SELECT * FROM {vehicles} WHERE id = ?', [$vid]);
+        $v = Db::row('SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND id = ?', [$vid]);
         $t->eq('FA-0001', $v['asset_code']);
         $t->eq('JALNPR123', $v['vin']);
         $t->eq('Isuzu', $v['make'], 'our make is kept');
         $t->eq('NPR', $v['model'], 'an empty model is filled in');
         $t->eq('2027-03-31', $v['insurance_expiry']);
-        $n = Db::row("SELECT * FROM {vehicles} WHERE reg_no = 'ALB 99'");
+        $n = Db::row("SELECT * FROM {vehicles} WHERE tenant_id = {tid} AND reg_no = 'ALB 99'");
         $t->eq('pickup', $n['body']);
         $t->eq('FA-0002', $n['asset_code']);
         $t->eq(null, $n['insurance_expiry']);

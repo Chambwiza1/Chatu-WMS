@@ -72,7 +72,7 @@ final class Demo
         foreach ($items as $sku => [$name, $kind, $uom, $dec, $track, $exp, $shelf, $minShelf, $cost, $price]) {
             $ids[$sku] = Items::save(['sku' => $sku, 'name' => $name, 'kind' => $kind, 'uom' => $uom, 'decimals' => $dec, 'tracking' => $track, 'expiry_required' => $exp,
                 'shelf_life_days' => $shelf, 'min_shelf_days' => $minShelf, 'sell_price' => $price, 'category_id' => $cat, 'reorder_level' => 10, 'reorder_qty' => 50]);
-            Db::exec('UPDATE {items} SET last_cost = ? WHERE id = ?', [$cost, $ids[$sku]]);
+            Db::exec('UPDATE {items} SET last_cost = ? WHERE tenant_id = {tid} AND id = ?', [$cost, $ids[$sku]]);
         }
         $sup = [
             'ZAMMILL' => Parties::save('suppliers', ['code' => 'ZAMMILL', 'name' => 'Zambia Millers Ltd', 'phone' => '+260 211 000001', 'lead_days' => 3]),
@@ -86,7 +86,7 @@ final class Demo
         ];
         Auth::actAs(null);
         $bins = [];
-        foreach (Db::rows('SELECT b.id, b.code, w.code wh FROM {bins} b JOIN {warehouses} w ON w.id = b.warehouse_id') as $b) {
+        foreach (Db::rows('SELECT b.id, b.code, w.code wh FROM {bins} b JOIN {warehouses} w ON w.id = b.warehouse_id WHERE b.tenant_id = {tid}') as $b) {
             $bins[$b['wh'] . ':' . $b['code']] = (int) $b['id'];
         }
         return ['tenant' => $tenantId, 'users' => $u, 'wh' => ['LSK' => $lsk, 'KTW' => $ktw], 'item' => $ids, 'supplier' => $sup, 'customer' => $cust, 'bin' => $bins];
@@ -190,7 +190,7 @@ final class Demo
         $as('steve');
         \App\Libraries\Fleet\Fleet::depart($trip, 84230);
         // an adjustment waiting for approval and a count in progress
-        $row = (int) Db::value("SELECT s.id FROM {stock} s JOIN {items} i ON i.id = s.item_id WHERE s.warehouse_id = ? AND i.sku = 'RICE5' AND s.qty > s.qty_allocated + 3 ORDER BY s.id LIMIT 1", [$lsk]);
+        $row = (int) Db::value("SELECT s.id FROM {stock} s JOIN {items} i ON i.id = s.item_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND i.sku = 'RICE5' AND s.qty > s.qty_allocated + 3 ORDER BY s.id LIMIT 1", [$lsk]);
         if ($row) {
             \App\Libraries\Docs\Adjustments::request(['warehouse_id' => $lsk, 'reason_code' => 'DAMAGE', 'notes' => 'Forklift tore three bags', 'lines' => [['stock_id' => $row, 'qty' => -3]]]);
         }
