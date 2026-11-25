@@ -18,11 +18,11 @@ The security policy itself is unchanged: forms still post only to our own site.
 
 ## Card payments that are already waiting
 
-Payments started before this update show "Go to the card page" too. DPO's page for them stays open for the life of DPO's token; after 2 days we mark them expired. Starting a new one is also fine.
+Payments started before this update show "Go to the card page" too. The link works for as long as DPO still holds that payment open; if DPO's page says it has expired, start a new one. After 2 days we mark a waiting payment expired.
 
 ## Setting up DPO for testing
 
-Under **Platform > Settings > Online payment** (hosted service) give:
+Under **Platform > Billing settings** (hosted service) give:
 
 - **DPO company token:** the Company Token of the test account.
 - **DPO service type:** the number DPO gives for the service sold (its "Product Service ID" or "Service Type").
@@ -31,6 +31,6 @@ Under **Platform > Settings > Online payment** (hosted service) give:
 ## Checks
 
 - **Automated tests:** 63 pass. The billing test now also checks the step page: a waiting card payment is passed on; a made-up reference, something that is not a reference, and a settled payment are not.
-- **In Chrome,** against a stand-in for DPO: Pay by card reaches the card page with no security-policy block; "Go to the card page" works from the invoice; after paying, the person is back on the invoice with "Paid. Thank you." and the invoice is paid through DPO.
-- **Update from 0.3.4** and **a fresh install** from the built zip: the step page answers, sign-in and the invoice pages open.
+- **In Chrome,** against a stand-in for DPO (run in Chatu Construction; the payment code is the same): Pay by card reaches the card page with no security-policy block; "Go to the card page" works from the invoice; after paying, the person is back on the invoice with "Paid. Thank you." and the invoice is paid through DPO.
+- **Update from 0.3.4** and **a fresh install** from the built zip: the step page answers and the sign-in page opens.
 - **Not checked against DPO itself:** DPO's servers cannot be reached from the build workspace, so the last step (DPO's real card page, with test cards) is for the first test on the hosted site.
