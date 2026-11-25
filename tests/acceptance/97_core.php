@@ -319,10 +319,14 @@ return [
         ]);
         $p = Pay::start('platform_invoice', $inv, $tid, 1000.0, 'dpo', false, ['return_url' => 'https://example.test/pay/return']);
         $t->true(str_ends_with((string) $p['pay_url'], 'payv2.php?ID=TT-1'), 'sent to DPO\'s page');
+        $t->eq((int) $p['id'], (int) (Pay::cardPage((string) $p['reference'])['id'] ?? 0), 'our own step page passes the customer on (a form may not send anyone off the site)');
+        $t->eq(null, Pay::cardPage('CPI-0-NOSUCHREF'), 'a made-up reference goes nowhere');
+        $t->eq(null, Pay::cardPage('../etc/passwd'), 'nor does anything that is not a reference');
         $t->eq('pending', Pay::check((int) $p['id'])['status'], 'not paid yet');
         Db::exec('UPDATE {gateway_payments} SET created_at = ? WHERE id = ?', [gmdate('Y-m-d H:i:s', time() - 600), $p['id']]);
         $t->eq(1, Pay::reconcile()['settled'], 'the scheduled check found it paid');
         $t->eq('paid', Billing::invoice($inv)['status']);
+        $t->eq(null, Pay::cardPage((string) $p['reference']), 'once settled, the step page passes no one on');
         Pay::$http = null;
         Tenancy::set($tid);
     },

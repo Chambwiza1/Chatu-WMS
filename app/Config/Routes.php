@@ -25,6 +25,7 @@ $routes->get('api/ping', 'Home::ping');
 // core 1.5b: payment gateways call these with no sign-in (signature checked, or DPO asked)
 $routes->post('pay/lenco/(:segment)', 'PayPublic::lenco/$1');
 $routes->get('pay/return', 'PayPublic::back');
+$routes->get('pay/go/(:segment)', 'PayPublic::go/$1'); // the step to DPO's page (a form may not redirect off this site)
 
 // signed in, any organisation or none
 $routes->group('', ['filter' => 'auth'], static function ($routes) {

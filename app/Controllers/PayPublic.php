@@ -12,6 +12,7 @@ use Throwable;
  * core 1.5b: addresses the payment gateways call, with no sign-in.
  *   POST /pay/lenco/platform     Lenco webhook for Chatu's own account (platform invoices)
  *   POST /pay/lenco/{org code}   Lenco webhook for an organisation's own account (its sales)
+ *   GET  /pay/go/{reference} the step from our Pay by card button to DPO's page
  *   GET  /pay/return             where DPO sends the customer back (TransactionToken, CompanyRef)
  * Nothing is trusted from the request but the reference: the webhook's signature is checked, and a return asks
  * DPO whether it was paid before anything is marked paid.
@@ -54,5 +55,31 @@ class PayPublic extends Controller
         $msg = ['paid' => 'Paid. Thank you.', 'pending' => 'DPO has not confirmed it yet. The invoice shows it as paid once it is through.', 'failed' => 'The payment did not go through.', 'cancelled' => 'The payment was cancelled.'][$p['status']];
         session()->setFlashdata($p['status'] === 'paid' ? 'ok' : 'error', $msg);
         return redirect()->to(site_url(Pay::returnPath($p)));
+    }
+
+    /**
+     * The step between our "Pay by card" button and DPO's page (GET /pay/go/{reference}). Our pages only let forms
+     * send people to this site (form-action 'self'), and browsers apply that to a redirect after a form too, so
+     * the form comes here first and this page, an ordinary page with a link, passes the customer on to DPO.
+     */
+    public function go(string $ref)
+    {
+        $p = Pay::cardPage($ref);
+        if (! $p) {
+            $was = preg_match('/^[A-Za-z0-9._-]{6,60}$/', $ref) ? Pay::byReference($ref) : null;
+            session()->setFlashdata('error', 'That payment is no longer waiting. Start it again from the invoice.');
+            return redirect()->to($was ? site_url(Pay::returnPath($was)) : site_url('/'));
+        }
+        $url = esc((string) $p['pay_url'], 'attr');
+        $css = esc(base_url('static/app.css'), 'attr');
+        $amt = esc($p['currency'] . ' ' . number_format((float) $p['amount'], 2));
+        return $this->response->setHeader('Cache-Control', 'no-store')->setBody(
+            '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex"><meta http-equiv="refresh" content="1;url=' . $url . '"><title>Going to DPO</title>'
+            . '<link rel="stylesheet" href="' . $css . '"></head><body><div class="login-wrap"><div class="login panel">'
+            . '<h1>Taking you to DPO\'s secure page</h1><p>To pay ' . $amt . ' by card or mobile money. You come back here when it is done.</p>'
+            . '<p><a class="btn" href="' . $url . '">Continue to payment</a></p><p class="muted small">Reference ' . esc($p['reference']) . '</p>'
+            . '</div></div></body></html>'
+        );
     }
 }

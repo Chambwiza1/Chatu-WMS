@@ -68,7 +68,7 @@ class Billing extends BaseController
             $p = Pay::start('platform_invoice', $id, $tid, (float) $i['amount'], $gw, false, ['phone' => $this->in('phone', ''), 'operator' => $this->in('operator', ''),
                 'return_url' => site_url('pay/return'), 'description' => $i['number'] . ' ' . Product::NAME]);
             if ($gw === 'dpo') {
-                return redirect()->to((string) $p['pay_url']);
+                return redirect()->to(site_url('pay/go/' . $p['reference'])); // not straight to DPO: form-action 'self' blocks that
             }
             return $this->ok($p['status'] === 'paid' ? 'Paid. Thank you.' : 'Check your phone and approve the payment of ' . $p['currency'] . ' ' . number_format((float) $p['amount'], 2) . '. This page shows it once it is through.', 'billing/invoices/' . $id);
         }, site_url('billing/invoices/' . $id));

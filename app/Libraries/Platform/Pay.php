@@ -226,6 +226,18 @@ final class Pay
         return Db::row('SELECT * FROM {gateway_payments} WHERE reference = ?', [$ref]);
     }
 
+    /**
+     * A waiting card payment by our reference, for the step page that passes the customer on to DPO. Null when the
+     * reference is not ours, is not a card payment, is no longer waiting, or has no page to go to.
+     */
+    public static function cardPage(string $ref): ?array
+    {
+        $p = preg_match('/^[A-Za-z0-9._-]{6,60}$/', $ref) ? self::byReference($ref) : null;
+        $ok = $p && $p['gateway'] === 'dpo' && $p['status'] === 'pending' && preg_match('~^https?://~i', (string) ($p['pay_url'] ?? ''));
+
+        return $ok ? $p : null;
+    }
+
     // ---- finding out whether it was paid ----------------------------------------------------------------------
 
     /**
