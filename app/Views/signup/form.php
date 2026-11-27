@@ -10,7 +10,7 @@
     <p class="muted"><?= $mode === 'self'
         ? 'Create your organisation and its first sign-in. We e-mail you a link to confirm; your free trial starts when you open it.'
         : 'Tell us what you need. We read every request and contact you to set up your account.' ?></p>
-<?php if ($error): ?><p class="flash error" role="alert"><?= esc($error) ?></p><?php endif ?>
+<?php if ($error): ?><p class="flash err" role="alert"><?= esc($error) ?></p><?php endif ?>
     <form method="post" action="<?= site_url('signup') ?>" class="stack">
       <?= csrf_field() ?>
       <div class="field"><label for="org_name">Organisation</label><input id="org_name" name="org_name" type="text" maxlength="150" autocomplete="organization" required value="<?= esc((string) ($old['org_name'] ?? ''), 'attr') ?>"></div>

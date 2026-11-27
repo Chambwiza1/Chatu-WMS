@@ -6,7 +6,7 @@
     ? 'Customers create their own organisation on the sign-up page. They confirm by an e-mailed link and start on a trial.'
     : 'Customers send a request from the sign-up page, saying what they need. You create the organisation and mark the request done.' ?>
  Page: <span class="mono"><?= esc(site_url('signup')) ?></span></p>
-<?php if ($mode === 'self' && ! $mailReady): ?><p class="flash error">The sign-up page stays closed until this installation can send e-mail: set the sender address under Platform settings.</p><?php endif ?>
+<?php if ($mode === 'self' && ! $mailReady): ?><p class="flash err">The sign-up page stays closed until this installation can send e-mail: set the sender address under Platform settings.</p><?php endif ?>
 <form method="post" action="<?= site_url('platform/signups/open') ?>" class="inline-form"><?= csrf_field() ?><input type="hidden" name="open" value="<?= $open ? '0' : '1' ?>">
 <span>The sign-up page is <b><?= $open ? 'open' : 'closed' ?></b>.</span> <button class="btn secondary small" type="submit"><?= $open ? 'Close it' : 'Open it' ?></button></form>
 </section>
