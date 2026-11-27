@@ -235,9 +235,14 @@ final class Signup
     /** E-mail everyone who manages organisations on the platform. */
     private static function tellOwners(string $subject, string $body): void
     {
-        $to = Db::rows("SELECT DISTINCT u.email FROM {users} u JOIN {user_roles} ur ON ur.user_id = u.id AND ur.tenant_id IS NULL AND ur.scope_type = 'platform'
-                          JOIN {role_permissions} rp ON rp.role_id = ur.role_id AND rp.permission_code = 'platform.tenants' WHERE u.active = 1 AND u.email IS NOT NULL AND u.email <> ''");
+        // candidates by role, then the product's own rule for who is a platform owner
+        $find = static fn () => Db::rows("SELECT DISTINCT u.id, u.email FROM {users} u JOIN {user_roles} ur ON ur.user_id = u.id JOIN {role_permissions} rp ON rp.role_id = ur.role_id AND rp.permission_code = 'platform.tenants'
+                                           WHERE u.active = 1 AND u.email IS NOT NULL AND u.email <> ''");
+        $to   = method_exists(Db::class, 'unscoped') ? Db::unscoped($find) : $find();   // roles of every organisation are read: the filter below decides
         foreach ($to as $r) {
+            if (! Access::platform('platform.tenants', (int) $r['id'])) {
+                continue;
+            }
             PasswordReset::queue((string) $r['email'], $subject, $body);
         }
     }
