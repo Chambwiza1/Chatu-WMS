@@ -65,7 +65,8 @@ final class Upgrade
 
     private static function col(BaseConnection $db, string $table, string $col, string $def): void
     {
-        if (! $db->fieldExists($col, $table)) {
+        // core 1.5.3: asked of the database itself; fieldExists() answers from a per-connection cache that goes stale after an ALTER
+        if (! $db->query('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', [$db->getPrefix() . $table, $col])->getRow()) {
             self::q($db, 'ALTER TABLE ' . $db->getPrefix() . $table . ' ADD COLUMN ' . $col . ' ' . $def);
         }
     }

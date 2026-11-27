@@ -344,4 +344,15 @@ return [
         }
         Tenancy::set($t->c['tenant']);
     },
+
+    'C15-6 core 1.5.3: an invoice the product raises itself needs no platform user; any other is still for the platform owner only' => static function (TestKit $t) {
+        Settings::set('edition', 'saas');
+        $tid = $t->c['tenant'];
+        $t->as('bella');
+        $t->throws(static fn () => Billing::issue($tid, 1, 120.0), 'platform owner only');
+        $id = Billing::issue($tid, 1, 120.0, 'Raised by the product', '2026-11-27', true);
+        core_pat();
+        $i = Billing::invoice($id);
+        $t->eq([120.0, 'issued', $t->uid('bella'), 'Raised by the product'], [(float) $i['amount'], $i['status'], (int) $i['issued_by'], $i['note']]);
+    },
 ];

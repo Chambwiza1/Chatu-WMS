@@ -215,9 +215,11 @@ final class Billing
     }
 
     /** Invoice an organisation for $months of its plan, starting the day after it is paid until (or invoiced to, or today). */
-    public static function issue(int $tenantId, int $months = 1, ?float $amount = null, ?string $note = null, ?string $today = null): int
+    public static function issue(int $tenantId, int $months = 1, ?float $amount = null, ?string $note = null, ?string $today = null, bool $system = false): int
     {
-        Access::requirePlatform('platform.tenants');
+        if (! $system) {   // $system: an invoice the product raises itself (ChatuPass: a one-event pass the organisation orders)
+            Access::requirePlatform('platform.tenants');
+        }
         $today ??= date('Y-m-d');
         $t = self::tenant($tenantId);
         if ($t['status'] === 'cancelled') {

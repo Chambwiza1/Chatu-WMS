@@ -76,7 +76,7 @@ return [
 
         $t->throws(static fn () => PasswordReset::complete($tok, 'New-pass-2026x', 'New-pass-2026y'), 'not the same');
         $t->throws(static fn () => PasswordReset::complete($tok, 'short1', 'short1'), 'at least 10');
-        $t->throws(static fn () => PasswordReset::complete('x' . substr($tok, 1), 'New-pass-2026x', 'New-pass-2026x'), 'used or is too old');
+        $t->throws(static fn () => PasswordReset::complete(($tok[0] === 'x' ? 'y' : 'x') . substr($tok, 1), 'New-pass-2026x', 'New-pass-2026x'), 'used or is too old');
         $t->true(! password_verify('New-pass-2026x', (string) Db::value('SELECT password_hash FROM {users} WHERE id = ?', [$uid])), 'nothing changed yet');
 
         $t->eq($uid, PasswordReset::complete($tok, 'New-pass-2026x', 'New-pass-2026x'), 'the link sets the password');
