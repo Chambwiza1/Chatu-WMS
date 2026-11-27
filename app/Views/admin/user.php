@@ -17,6 +17,7 @@ foreach ($allRoles as $r) {
 <?php if ($conflicts): ?><div class="flash err">Segregation of duties: <?= esc(implode('; ', array_map(static fn ($c) => $c['description'] . ' (' . $c['a_name'] . ' and ' . $c['b_name'] . ')', $conflicts))) ?></div><?php endif ?>
 <?php if ($u['is_account_owner']): ?><div class="flash info">The account owner may always do everything, at every warehouse.</div><?php elseif ($self): ?><div class="flash info">This is you. Nobody changes their own access: another administrator does.</div><?php endif ?>
 
+<?= view('admin/_signin_as', ['u' => $u]) ?>
 <form method="post" action="<?= site_url('admin/users/' . $u['id'] . '/access') ?>" class="stack" data-access-form><?= csrf_field() ?>
 <div class="access-top">
 <section class="panel"><h2>Roles</h2><p class="small muted">What a role may do shows ticked and greyed under Permissions. <a href="<?= site_url('admin/roles') ?>">See and change the roles</a></p>

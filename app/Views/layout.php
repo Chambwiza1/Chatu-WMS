@@ -39,6 +39,7 @@ if ($me) {
         'Set up' => [
             ['/warehouses', 'Warehouses and bins', can('warehouse.setup')],
             ['/admin', 'Administration', can('user.view') || can('role.view') || can('admin.settings')],
+            ['/admin/support', 'Support access', can('role.update')],
             ['/billing', 'Plan and billing', ! ($single ?? true) && (can('billing.manage') || can('admin.settings'))],
             ['/audit', 'Audit log', can('audit.view')],
         ],
@@ -80,6 +81,7 @@ $active = static function (string $href) use ($path): bool {
 <body<?= $me ? ' data-live="' . site_url('live') . '" data-live-user="' . (int) $me['id'] . '"' : '' ?> data-base="<?= esc(rtrim(base_url(), '/'), 'attr') ?>"<?= \App\Libraries\Core\Auth::id() ? ' data-uid="' . (int) \App\Libraries\Core\Auth::id() . '"' . (\App\Libraries\Core\Access::can('stock.view') ? ' data-snapshot="1"' : '') : '' ?>>
 <a class="skip" href="#main">Skip to content</a>
 <div id="net-banner" class="net-banner" role="status" hidden>You are offline. Nothing can be saved until you are back online.</div>
+<?= view('_signin_banner') ?>
 <header class="topbar">
   <a class="brand" href="<?= site_url('/') ?>"><img src="<?= base_url('static/brand/mark-96.png') ?>" alt="" width="40" height="30"><span><span class="name"><?= esc(\App\Libraries\Core\Settings::get('app_name')) ?></span><span class="by"><?= esc(($org ?? null) ? (\App\Libraries\Core\Settings::get('company_name') ?: $org['name']) : 'by Chatu Innovations') ?></span></span></a>
   <?php if ($me): ?>

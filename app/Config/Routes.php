@@ -34,6 +34,7 @@ $routes->get('pay/go/(:segment)', 'PayPublic::go/$1'); // the step to DPO's page
 // signed in, any organisation or none
 $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('logout', 'AuthController::logout');
+    $routes->post('signin-as/stop', 'SignIn::stop');                   // core 1.2: back to your own sign-in
     $routes->get('account', 'AuthController::account');
     $routes->post('account/password', 'AuthController::password');
     $routes->get('org', 'AuthController::org');
@@ -187,6 +188,10 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/users', 'Admin::createUser');
     $routes->post('admin/users/existing', 'Admin::addExisting');
     $routes->get('admin/users/(:num)', 'Admin::user/$1');
+    $routes->post('signin-as/(:num)', 'SignIn::start/$1');               // core 1.2: sign in as one of your people
+    $routes->get('admin/support', 'SignIn::index');
+    $routes->post('admin/support', 'SignIn::allow');
+    $routes->get('admin/support/(:num)', 'SignIn::actions/$1');
     $routes->post('admin/users/(:num)', 'Admin::saveUser/$1');
     $routes->post('admin/users/(:num)/access', 'Admin::saveAccess/$1');
     $routes->get('admin/roles', 'Admin::roles');
@@ -217,6 +222,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
 // the platform owner (online service edition only)
 $routes->group('platform', ['filter' => ['auth', 'platform']], static function ($routes) {
     $routes->get('/', 'Platform::index');
+    $routes->post('tenants/(:num)/signin-as', 'SignIn::support/$1');    // core 1.2: support signs in, while the organisation allows it
     $routes->get('signups', 'Signup::index');
     $routes->post('signups/open', 'Signup::open');
     $routes->post('signups/(:num)', 'Signup::decide/$1');

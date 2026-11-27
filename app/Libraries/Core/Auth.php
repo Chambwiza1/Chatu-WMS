@@ -41,6 +41,20 @@ final class Auth
             session()->setFlashdata('error', 'You were signed out because your account signed in on another device or browser.');
             return null;
         }
+        // core 1.2: signed in as someone else. The helper's own sign-in was checked above; now answer as that person,
+        // for as long as it is allowed.
+        $imp = session('imp');
+        if (is_array($imp) && ! empty($imp['as']) && (int) $imp['by'] === (int) $u['id']) {
+            $how = SignInAs::ended($imp);
+            $as  = $how ? null : Db::row('SELECT * FROM {users} WHERE id = ?', [(int) $imp['as']]);
+            if (! $as) {
+                SignInAs::stop($how ?: 'gone');
+                session()->setFlashdata('error', $how === 'time' ? 'Signing in as someone ended: its time ran out.' : ($how === 'closed' ? 'The organisation closed support access, so the sign-in ended.' : 'That sign-in ended.'));
+            } else {
+                unset($as['password_hash'], $as['session_key']);
+                $u = $as + ['_signed_in_as' => $imp];
+            }
+        }
         self::$cache = $u;
         return $u;
     }
@@ -154,6 +168,7 @@ final class Auth
 
     public static function logout(): void
     {
+        SignInAs::stop('signed out');   // core 1.2: a sign-in as someone ends with the helper's own
         $id = self::id();
         if ($id) {
             Audit::log('auth.logout', 'user', $id);

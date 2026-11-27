@@ -55,7 +55,7 @@ abstract class BaseController extends Controller
     {
         $uid  = Auth::id();
         $mine = [];
-        if ($uid && strtolower($this->request->getMethod()) === 'get') {
+        if ($uid && strtolower($this->request->getMethod()) === 'get' && ! \App\Libraries\Core\SignInAs::current()) {   // core 1.2: a helper never reads the person's messages away
             Notify::seenRecord($uid, (string) $this->request->getPath()); // core 1.1 (E2): the page of one record reads the messages about it
         }
         if ($uid && Tenancy::id() !== null) {

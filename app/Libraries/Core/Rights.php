@@ -97,6 +97,7 @@ final class Rights
             'create' => ['user.create' => ['Create', 'Add people']],
             'update' => ['user.update' => ['Edit', 'Change people\'s details, passwords, roles, warehouses and permissions']],
             'delete' => ['user.delete' => ['Delete', 'Switch people off in this organisation']],
+            'supervise' => ['user.signin_as' => ['Sign in as a person', 'Sign in as another person of the organisation to help them or see what they see (never as an administrator; with a reason; every save is listed)']],
         ]],
         'roles' => ['Roles', null, [
             'view'   => ['role.view' => ['View', 'See the roles and what each may do']],

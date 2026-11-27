@@ -11,6 +11,7 @@
 <div class="field"><label for="reason">Reason (goes into both audit logs)</label><input id="reason" name="reason" required></div>
 <div><button class="btn" type="submit" data-confirm="Change the status?">Change status</button></div></form></section><?php endif ?></div>
 <?= view('platform/_tenant_billing', ['t' => $t]) ?>
+<?= view('platform/_support', ['t' => $t]) ?>
 <h2>History</h2><div class="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>What</th><th>Detail</th></tr></thead><tbody>
 <?php foreach ($log as $e): ?><tr><td><?= local_time($e['at']) ?></td><td><?= esc((string) $e['username']) ?></td><td><?= esc($e['action']) ?></td><td><?= esc((string) $e['detail']) ?> <span class="muted small"><?= esc((string) $e['after_json']) ?></span></td></tr><?php endforeach ?></tbody></table></div>
 <?= $this->endSection() ?>

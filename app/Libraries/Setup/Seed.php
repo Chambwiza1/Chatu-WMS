@@ -20,6 +20,7 @@ final class Seed
         'platform.tenants'  => 'See and manage organisations on the platform (no access to their stock)',
         'platform.settings' => 'Keep platform settings, the scheduled job and the integrity check',
         'platform.audit'    => 'See the platform audit log',
+        'platform.support'  => 'Sign in as an organisation\'s account owner, only while that organisation allows it',
     ];
 
     /** code => [name, rank, description, permissions] */
@@ -33,8 +34,8 @@ final class Seed
         'transport'         => ['Transport officer', 3, 'Keeps vehicles and drivers, plans and closes trips.', ['stock.view', 'fleet.manage', 'report.view']],
         'accountant'        => ['Accountant', 4, 'Sees costs and values, approves adjustments and counts.', ['stock.view', 'stock.view_cost', 'stock.approve', 'report.view', 'data.export', 'audit.view']],
         'auditor'           => ['Auditor (read-only)', 1, 'Sees everything, changes nothing.', ['stock.view', 'stock.view_cost', 'report.view', 'data.export', 'audit.view']],
-        'system_admin'      => ['System administrator', 1, 'Users, roles, settings and warehouse layout. Cannot move or approve stock.', ['admin.users', 'admin.settings', 'warehouse.setup', 'audit.view']],
-        'platform_owner'    => ['Platform owner', 9, 'Runs the online service: organisations, plans, platform settings. Sees no organisation\'s stock.', ['platform.tenants', 'platform.settings', 'platform.audit']],
+        'system_admin'      => ['System administrator', 1, 'Users, roles, settings and warehouse layout. Cannot move or approve stock.', ['user.signin_as', 'admin.users', 'admin.settings', 'warehouse.setup', 'audit.view']],
+        'platform_owner'    => ['Platform owner', 9, 'Runs the online service: organisations, plans, platform settings. Sees no organisation\'s stock.', ['platform.tenants', 'platform.settings', 'platform.audit', 'platform.support']],
     ];
 
     public const SOD = [

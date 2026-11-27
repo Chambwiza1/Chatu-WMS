@@ -47,6 +47,10 @@ final class Product
         throw new \App\Libraries\Core\BizException('Organisations are created by the platform owner.');
     }
 
+    /** core 1.2: signing in as someone (Core\SignInAs). */
+    public const SIGNIN_AS = ['use' => 'user.signin_as', 'admins' => ['user.update', 'role.update', 'user.signin_as'], 'manage' => 'role.update', 'page' => 'admin/users/%d',
+        'blocked' => [], 'give' => ['role.update' => ['user.signin_as']]];
+
     public const OFF_BY_DEFAULT = [];
 
     /** Current use of each limit for one organisation. */

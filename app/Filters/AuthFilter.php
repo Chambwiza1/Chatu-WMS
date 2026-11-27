@@ -33,6 +33,11 @@ class AuthFilter implements FilterInterface
         if (! in_array('/' . ltrim($request->getUri()->getPath(), '/'), ['/live', '/offline/snapshot'], true)) {
             session()->set('last_seen', time()); // core 1.1 (E1, E2): the pop-up check and the offline look-up refresh are not activity
         }
+        // core 1.2: while signed in as someone, every page that changes something is listed; a few are refused
+        if ($why = \App\Libraries\Core\SignInAs::record($request->getMethod(), $request->getUri()->getPath())) {
+            session()->setFlashdata('error', $why);
+            return redirect()->back();
+        }
         \App\Filters\TenantFilter::resolve();
         \App\Libraries\Jobs::maybeRunOnVisit();
         return null;

@@ -110,7 +110,8 @@ class Home extends BaseController
         if (! $n) {
             return $this->notFound('Message');
         }
-        Notify::readOne((int) Auth::id(), $id);
+        if (! \App\Libraries\Core\SignInAs::current())   // core 1.2: a helper never reads the person's messages away
+            Notify::readOne((int) Auth::id(), $id);
         return redirect()->to(site_url(ltrim((string) ($n['link'] ?: 'notifications'), '/')));
     }
 

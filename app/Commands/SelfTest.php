@@ -119,6 +119,7 @@ class SelfTest extends BaseCommand
         \App\Libraries\Setup\UpgradeCore15::run($conn);
         \App\Libraries\Setup\UpgradeReset::run($conn);
         \App\Libraries\Setup\UpgradeSignup::run($conn);
+        \App\Libraries\Setup\UpgradeSignIn::run($conn);
         Db::reset($conn);
         \App\Libraries\Core\Tenancy::set(null);
         Settings::flush();
