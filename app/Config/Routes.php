@@ -12,6 +12,10 @@ $routes->get('update', 'Update::index');     // core 1.1 (A9): the in-app databa
 $routes->post('update', 'Update::run');
 $routes->get('login', 'AuthController::login');
 $routes->post('login', 'AuthController::doLogin');
+$routes->get('signup', 'Signup::form');                          // core 1.5.4: sign-up by the customer
+$routes->post('signup', 'Signup::submit');
+$routes->get('signup/confirm/(:segment)', 'Signup::confirm/$1');
+$routes->post('signup/confirm/(:segment)', 'Signup::doConfirm/$1');
 $routes->get('forgot-password', 'AuthController::forgot');      // core 1.5.1 (B12): a forgotten password
 $routes->post('forgot-password', 'AuthController::doForgot');
 $routes->get('reset-password/(:segment)', 'AuthController::reset/$1');
@@ -213,6 +217,9 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
 // the platform owner (online service edition only)
 $routes->group('platform', ['filter' => ['auth', 'platform']], static function ($routes) {
     $routes->get('/', 'Platform::index');
+    $routes->get('signups', 'Signup::index');
+    $routes->post('signups/open', 'Signup::open');
+    $routes->post('signups/(:num)', 'Signup::decide/$1');
     $routes->get('tenants/new', 'Platform::newTenant');
     $routes->post('tenants', 'Platform::createTenant');
     $routes->get('tenants/(:num)', 'Platform::tenant/$1');

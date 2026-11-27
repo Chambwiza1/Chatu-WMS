@@ -581,3 +581,7 @@ table.kv th { text-align: left; color: var(--ink-2); font-weight: 600; padding-r
 .login .forgot { margin: 10px 0 0; font-size: .9rem; text-align: center; }
 .login h1 { font-size: 1.25rem; margin: 6px 0 8px; }
 .login form + p { margin-top: 12px; }
+
+/* core 1.5.4: sign-up */
+.login.signup{width:min(34rem,100%)}
+.field.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}

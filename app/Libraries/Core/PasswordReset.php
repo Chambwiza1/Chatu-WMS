@@ -138,6 +138,12 @@ final class PasswordReset
         return (int) $u['id'];
     }
 
+    /** core 1.5.4: other account mail (sign-up) goes out the same way: queued, sent once the page is answered. */
+    public static function queue(string $to, string $subject, string $body): void
+    {
+        self::$queue[] = ['to' => $to, 'subject' => $subject, 'body' => $body];
+    }
+
     /** Send what is waiting. Controllers call sendAfterResponse(); tests and jobs may call this. */
     public static function flush(): int
     {

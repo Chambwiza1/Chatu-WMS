@@ -25,6 +25,28 @@ final class Product
     ];
 
     /** Modules that are off until switched on. */
+    /** core 1.5.4: the sign-up page sums up what the customer needs and sends a request (Platform\Signup). */
+    public const SIGNUP_MODE = 'request';
+
+    public static function signupFields(): array
+    {
+        return [
+            'warehouses' => ['label' => 'How many warehouses or stores?', 'type' => 'number', 'required' => true],
+            'people'     => ['label' => 'How many people will sign in?', 'type' => 'number', 'required' => true],
+            'items'      => ['label' => 'About how many stock items?', 'type' => 'number'],
+            'production' => ['label' => 'Do you make or pack products (production)?', 'options' => ['yes' => 'Yes', 'no' => 'No']],
+            'fleet'      => ['label' => 'Do you run your own delivery vehicles?', 'options' => ['yes' => 'Yes', 'no' => 'No']],
+            'current'    => ['label' => 'What do you use today?', 'hint' => 'For example: paper, a spreadsheet, another system.'],
+            'start'      => ['label' => 'When would you like to start?'],
+            'notes'      => ['label' => 'Anything else we should know?', 'type' => 'long'],
+        ];
+    }
+
+    public static function signupCreate(array $s): array
+    {
+        throw new \App\Libraries\Core\BizException('Organisations are created by the platform owner.');
+    }
+
     public const OFF_BY_DEFAULT = [];
 
     /** Current use of each limit for one organisation. */

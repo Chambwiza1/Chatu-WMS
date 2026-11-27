@@ -50,6 +50,7 @@ if ($me) {
     if (! ($single ?? true) && \App\Libraries\Core\Access::platform('platform.tenants')) {
         $groups['Platform'] = [
             ['/platform', 'Organisations', true],
+            ['/platform/signups', 'Sign-ups' . (($w = \App\Libraries\Platform\Signup::waiting()) ? ' (' . $w . ')' : ''), true],
             ['/platform/plans', 'Plans', true],
             ['/platform/invoices', 'Invoices', true],
             ['/platform/payments', 'Online payments', true],

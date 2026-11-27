@@ -12,6 +12,8 @@
       <button class="btn" type="submit">Sign in</button>
     </form>
     <p class="forgot"><a href="<?= site_url('forgot-password') ?>">Forgotten your password?</a></p>
+<?php if (\App\Libraries\Platform\Signup::open()): ?>    <p class="forgot"><a href="<?= site_url('signup') ?>"><?= \App\Libraries\Platform\Signup::mode() === 'self' ? 'New here? Sign up' : 'New here? Ask for an account' ?></a></p>
+<?php endif ?>
     <p class="contact">Chatu Innovations · info@chatuzm.com · +260 773818370 · www.chatuzm.com</p>
   </div>
 </div>

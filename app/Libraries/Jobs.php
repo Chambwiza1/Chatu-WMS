@@ -37,6 +37,7 @@ final class Jobs
                 if (Settings::get('billing_daily_on') !== date('Y-m-d')) {
                     Settings::set('billing_daily_on', date('Y-m-d'));
                     $out['billing'] = array_sum(\App\Libraries\Platform\Billing::daily());
+                    $out['signups'] = \App\Libraries\Platform\Signup::purge();   // core 1.5.4: links never opened
                 }
                 // core 1.1: each organisation's own work, while time allows
                 foreach (self::tenants() as $tid) {
