@@ -85,6 +85,26 @@ final class Dashboard
         return $out;
     }
 
+    /**
+     * core 1.3 (E1): what waits for this person, as pop-up alerts. Each is keyed by what it is and how many, so one put
+     * aside comes back when the number changes. Only the ones that need doing (warn) or are overdue (bad).
+     */
+    public static function alerts(array $aside = []): array
+    {
+        $out = [];
+        foreach (self::todo() as [$n, $label, $hint, $link, $tone]) {
+            if ($n <= 0 || ! in_array($tone, ['warn', 'bad'], true)) {
+                continue;
+            }
+            $key = 'a-' . substr(md5($label), 0, 10) . '-' . $n;
+            if (in_array($key, $aside, true)) {
+                continue;
+            }
+            $out[] = ['key' => $key, 'title' => $n . ' · ' . $label, 'body' => $hint, 'tone' => $tone, 'url' => site_url(ltrim($link, '/'))];
+        }
+        return $out;
+    }
+
     public static function figures(): ?array
     {
         if (! Access::can('stock.view')) {

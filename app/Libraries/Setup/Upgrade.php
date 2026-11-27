@@ -63,6 +63,12 @@ final class Upgrade
         self::col($db, 'users', 'session_key', "CHAR(40) NULL COMMENT 'core 1.1: the current sign-in; older sessions end'");
     }
 
+    /** core 1.3 (0.4.0): light or dark on the person's account (a device may still override it). */
+    public static function v040(BaseConnection $db): void
+    {
+        self::col($db, 'users', 'theme', "ENUM('auto','light','dark') NOT NULL DEFAULT 'auto' COMMENT 'core 1.3: light, dark, or follow the device'");
+    }
+
     private static function col(BaseConnection $db, string $table, string $col, string $def): void
     {
         // core 1.5.3: asked of the database itself; fieldExists() answers from a per-connection cache that goes stale after an ALTER

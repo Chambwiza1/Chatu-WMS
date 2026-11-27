@@ -85,6 +85,20 @@ class AuthController extends BaseController
         return $this->render('auth/account', ['roles' => Access::roles((int) Auth::id()), 'wh' => $wh, 'whCodes' => $codes], 'My account');
     }
 
+    /** core 1.3 (C1): light, dark or follow the device, kept on the person's account (a device may override it). */
+    public function theme()
+    {
+        $t = (string) $this->in('theme', '');
+        if (! in_array($t, ['auto', 'light', 'dark'], true)) {
+            return $this->request->isAJAX() ? $this->response->setStatusCode(422)->setJSON(['ok' => false]) : $this->ok('Choose Follow the device, Light or Dark.', 'account');
+        }
+        Auth::setTheme((int) Auth::id(), $t);
+        if ($this->request->isAJAX()) {
+            return $this->response->setJSON(['ok' => true, 'theme' => $t]);
+        }
+        return $this->ok('Saved: ' . ['auto' => 'follow the device', 'light' => 'light', 'dark' => 'dark'][$t] . ', on every device you sign in on.', 'account');
+    }
+
     public function password()
     {
         return $this->act(function () {

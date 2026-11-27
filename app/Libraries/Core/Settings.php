@@ -42,6 +42,10 @@ final class Settings
         'transfer_loss_note'   => '1',     // a final transfer receipt with missing units needs a note
         'live_popups'          => '1',     // core 1.1 (E2): new messages pop up on screen and stay until closed
         'live_sound'           => '1',
+        'live_alerts'          => '1',     // core 1.3 (E1): what waits for a person pops up too (approvals, expiry, reorder)
+        'brand_theme'          => 'green', // core 1.3 (C2): a ready palette, or 'custom'
+        'brand_primary'        => '',
+        'brand_accent'         => '',
         'company_logo'         => '',
         'last_reconcile'       => '',      // the organisation's last integrity check (JSON)
         'last_daily'           => '',      // the day its daily reminders went out

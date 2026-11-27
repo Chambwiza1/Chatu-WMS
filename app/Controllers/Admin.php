@@ -28,7 +28,8 @@ class Admin extends BaseController
         'fleet_warn_days'   => ['Fleet warning (days)', 'Insurance, fitness, road tax, licences and services due within this many days are flagged.'],
         'transfer_loss_note' => ['Note required for transfer losses (1 = yes)', 'A final transfer receipt with missing units needs a note.'],
         'live_popups'       => ['Messages pop up (1 = yes, 0 = no)', 'New messages appear on every page until each is opened or closed.'],
-        'live_sound'        => ['Sound with them (1 = yes, 0 = no)', 'A short tone when a new message pops up. Each device can still mute it.'],
+        'live_sound'        => ['Sound with them (1 = yes, 0 = no)', 'A short tone when a new message or alert pops up. Each device can still mute it.'],
+        'live_alerts'       => ['Alerts pop up (1 = yes, 0 = no)', 'What waits for each person (approvals, transfers arriving, expired batches, items to reorder, fleet papers) pops up once per sign-in, and again when it changes.'],
         'session_idle_minutes' => ['Sign out after idle (minutes)', ''],
         'single_session'    => ['One sign-in per account (1 = on, 0 = off)', 'On: signing in on another device or browser signs the first one out, and it is told why.'],
         'mail_from'         => ['E-mail sender address', 'Leave empty to send no e-mail.'],
@@ -242,7 +243,7 @@ class Admin extends BaseController
                     if (in_array($k, ['over_receipt_pct', 'adjust_auto_limit', 'count_auto_limit', 'expiry_warn_days', 'fleet_warn_days', 'session_idle_minutes', 'max_upload_mb', 'smtp_port'], true) && $v !== '' && (! is_numeric($v) || (float) $v < 0)) {
                         throw new BizException(self::EDITABLE[$k][0] . ': give a number, 0 or more.');
                     }
-                    if (in_array($k, ['live_popups', 'live_sound', 'transfer_loss_note', 'single_session', 'web_cron'], true) && ! in_array($v, ['0', '1'], true)) {
+                    if (in_array($k, ['live_popups', 'live_sound', 'live_alerts', 'transfer_loss_note', 'single_session', 'web_cron'], true) && ! in_array($v, ['0', '1'], true)) {
                         throw new BizException(self::EDITABLE[$k][0] . ': 1 or 0.');
                     }
                     if ($k === 'currency_code') {
@@ -301,6 +302,15 @@ class Admin extends BaseController
             \App\Libraries\Admin\Brand::upload($this->request->getFile('logo'));
             return $this->ok('Logo saved. It now appears on printed documents.', 'admin/settings');
         }, site_url('admin/settings'));
+    }
+
+    /** core 1.3 (C2): the organisation's colours: a ready palette or its own two colours, checked for legibility. */
+    public function theme()
+    {
+        return $this->act(function () {
+            \App\Libraries\Admin\Theme::save((string) $this->in('brand_theme', ''), (string) $this->in('brand_primary', ''), (string) $this->in('brand_accent', ''));
+            return $this->ok('Colours saved. Everyone in the organisation sees them on their next page.', 'admin/settings#colours');
+        }, site_url('admin/settings#colours'));
     }
 
     public function logoFile()

@@ -188,4 +188,31 @@ final class Auth
         }
         return null;
     }
+
+    /** core 1.3 (C1): the person's light-or-dark choice (auto, light, dark); 'auto' before the database update. */
+    public static function theme(?int $userId = null): string
+    {
+        $userId ??= self::id();
+        if (! $userId) {
+            return 'auto';
+        }
+        try {
+            $t = (string) Db::value('SELECT theme FROM {users} WHERE id = ?', [$userId]);
+        } catch (\Throwable $e) {
+            return 'auto';
+        }
+        return in_array($t, ['light', 'dark'], true) ? $t : 'auto';
+    }
+
+    public static function setTheme(int $userId, string $theme): void
+    {
+        if (! in_array($theme, ['auto', 'light', 'dark'], true)) {
+            throw new BizException('Choose Follow the device, Light or Dark.');
+        }
+        $old = self::theme($userId);
+        Db::exec('UPDATE {users} SET theme = ? WHERE id = ?', [$theme, $userId]);
+        if ($old !== $theme) {
+            Audit::log('user.theme', 'user', $userId, ['theme' => $old], ['theme' => $theme]);
+        }
+    }
 }

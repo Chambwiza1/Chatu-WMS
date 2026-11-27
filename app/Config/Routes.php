@@ -25,6 +25,7 @@ $routes->post('install', 'Install::run');
 $routes->get('cron/run', 'Cron::run');
 $routes->get('health', 'Cron::health'); // core 1.1
 $routes->get('api/ping', 'Home::ping');
+$routes->get('brand.css', 'BrandCss::css');   // core 1.3 (C2): the organisation's colours
 
 // core 1.5b: payment gateways call these with no sign-in (signature checked, or DPO asked)
 $routes->post('pay/lenco/(:segment)', 'PayPublic::lenco/$1');
@@ -37,10 +38,12 @@ $routes->group('', ['filter' => 'auth'], static function ($routes) {
     $routes->post('signin-as/stop', 'SignIn::stop');                   // core 1.2: back to your own sign-in
     $routes->get('account', 'AuthController::account');
     $routes->post('account/password', 'AuthController::password');
+    $routes->post('account/theme', 'AuthController::theme');        // core 1.3 (C1): light or dark on the account
     $routes->get('org', 'AuthController::org');
     $routes->post('org', 'AuthController::switchOrg');
     $routes->get('notifications', 'Home::notifications');
     $routes->get('live', 'Home::live');                                 // core 1.1 (E2): new messages for the pop-ups
+    $routes->post('live/aside', 'Home::aside');                         // core 1.3 (E1): put an alert aside until it changes
     $routes->post('notifications/read', 'Home::readAll');
     $routes->get('notifications/(:num)', 'Home::openMessage/$1');
     $routes->post('notifications/(:num)/read', 'Home::readOne/$1');
@@ -208,6 +211,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/settings', 'Admin::saveSettings');
     $routes->post('admin/reasons', 'Admin::saveReason');
     $routes->post('admin/logo', 'Admin::logo');
+    $routes->post('admin/theme', 'Admin::theme');                        // core 1.3 (C2): the organisation's colours
     $routes->get('brand/logo', 'Admin::logoFile');
     $routes->get('admin/reconcile', 'Admin::reconcile');
     $routes->post('admin/reconcile', 'Admin::runReconcile');

@@ -86,6 +86,8 @@ class Home extends BaseController
         $pop   = Notify::popups((int) $uid, $after);
         $max   = (int) Db::value('SELECT COALESCE(MAX(id), 0) FROM {notifications} WHERE tenant_id <=> ? AND user_id = ?', [$tid, $uid]);
         $on    = static fn (string $k): bool => ! $tid || \App\Libraries\Core\Settings::tenant($k, '1') !== '0';
+        // core 1.3 (E1): what waits for this person pops up too; never while signed in as someone
+        $alerts = $tid && $on('live_alerts') && ! \App\Libraries\Core\SignInAs::current() ? \App\Libraries\Reports\Dashboard::alerts((array) (session('alerts_aside') ?? [])) : [];
         return $this->response->setHeader('Cache-Control', 'no-store')->setJSON([
             'ok'       => true,
             'popups'   => $on('live_popups'),
@@ -97,10 +99,21 @@ class Home extends BaseController
             'all'      => site_url('notifications'),
             'read'     => site_url('notifications'),
             'session'  => substr(hash('sha256', $uid . ':' . (string) session('skey') . ':' . (int) $tid), 0, 16),
-            'alerts'   => [],
-            'alertCount' => 0,
+            'alerts'   => $alerts,
+            'alertCount' => count($alerts),
             'every'    => 45,
         ]);
+    }
+
+    /** core 1.3 (E1): put an alert aside for this sign-in; it comes back when its number changes. */
+    public function aside()
+    {
+        $key = (string) $this->request->getPost('key');
+        if (preg_match('/^a-[0-9a-f]{10}-\d+$/', $key)) {
+            $kept   = array_slice(array_values(array_unique(array_merge((array) (session('alerts_aside') ?? []), [$key]))), -50);
+            session()->set('alerts_aside', $kept);
+        }
+        return $this->response->setJSON(['ok' => true]);
     }
 
     /** Open one message: it is read, and its page opens. */

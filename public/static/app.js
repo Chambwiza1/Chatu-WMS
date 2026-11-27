@@ -312,7 +312,7 @@
     function csrf() { const i = document.querySelector('input[name^="csrf"], input[name="' + (window.CSRF_NAME || 'csrf_test_name') + '"]'); return i ? [i.name, i.value] : null; }
     function notice(n) {
       const st = holder(); st.hidden = false;
-      if (st.querySelectorAll('.live-n').length >= 6) { const old = st.querySelector('.live-n:not([data-live-key^="msg-"])') || st.querySelector('.live-n'); old.remove(); }
+      if (st.querySelectorAll('.live-n').length >= 8) { const old = st.querySelector('.live-n:not([data-live-key^="msg-"])') || st.querySelector('.live-n'); old.remove(); }
       const el = document.createElement('article');
       el.className = 'live-n ' + (n.tone === 'bad' ? 'bad' : n.kind === 'msg' ? 'msg' : 'warn');
       if (n.key) el.dataset.liveKey = n.key; // not data-key: that is the number pad's
@@ -394,15 +394,19 @@
               stack.appendChild(more);
             } else if (more) { more.remove(); }
             if (stack && !stack.querySelector('.live-n')) stack.hidden = true;
-            let shown = {};
-            try { shown = JSON.parse(store(sessionStorage, K_ALERT) || '{}'); } catch (e) { shown = {}; }
-            const now = {};
-            d.alerts.forEach((a) => {
-              now[a.key] = 1;
-              if (!shown[a.key]) { notice({ kind: 'alert', key: a.key, title: a.title, tone: a.tone, url: a.url }); fresh++; if (a.tone === 'bad') urgent = true; }
-            });
-            store(sessionStorage, K_ALERT, JSON.stringify(now));
           }
+          // core 1.3 (E1): what waits for this person pops up once per sign-in, and again when its number changes;
+          // "Put aside" hides it on the server until then. Its own setting (Alerts pop up), apart from messages.
+          let shown = {};
+          try { shown = JSON.parse(store(sessionStorage, K_ALERT) || '{}'); } catch (e) { shown = {}; }
+          const now = {};
+          (d.alerts || []).forEach((a) => {
+            now[a.key] = 1;
+            if (!shown[a.key]) { notice({ kind: 'alert', key: a.key, title: a.title, body: a.body, tone: a.tone, url: a.url }); fresh++; if (a.tone === 'bad') urgent = true; }
+          });
+          document.querySelectorAll('.live-n[data-live-key^="a-"]').forEach((x) => { if (!now[x.dataset.liveKey]) x.remove(); });
+          if (stack && !stack.querySelector('.live-n')) stack.hidden = true;
+          store(sessionStorage, K_ALERT, JSON.stringify(now));
           store(localStorage, K_MSG, String(d.maxId));
           if (fresh && d.sound) chime(urgent);
           if (d.every && d.every * 1000 !== every) { every = d.every * 1000; clearInterval(timer); timer = setInterval(tick, every); }
@@ -414,4 +418,97 @@
     const tick = () => { if (!document.hidden || Math.random() < 0.5) poll(); };
     let timer = setInterval(tick, every);
   })();
+})();
+
+/* Chatu Warehouse 0.4.0 (core 1.3): light or dark (C1, as ChatuPass), the organisation's colours on swatches (C2),
+   and the grouped menu that folds, with menu search and a Menu button on phones (C6). */
+(function () {
+  'use strict';
+  // the Content-Security-Policy allows no inline style attributes; styles set through the CSSOM are fine
+  document.querySelectorAll('[data-css]').forEach((el) => { el.style.cssText += ';' + el.dataset.css; });
+
+  // ----- the top-bar button: this device goes account's choice -> Light -> Dark -> back to the account's choice
+  const btn = document.querySelector('[data-theme-toggle]');
+  const LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+  function paint() {
+    if (!btn || !window.ChatuTheme) return;
+    const from = window.ChatuTheme.from(); const c = window.ChatuTheme.choice();
+    btn.querySelector('.tl').textContent = LABEL[c] || 'Auto';
+    btn.setAttribute('aria-label', 'Light or dark: ' + (LABEL[c] || 'Auto') + (from === 'device' ? ', on this device only' : ', from your account') + '. Press to change on this device.');
+    btn.setAttribute('title', from === 'device' ? 'On this device only' : 'From your account');
+  }
+  if (btn && window.ChatuTheme) {
+    btn.addEventListener('click', () => {
+      const from = window.ChatuTheme.from(); const c = window.ChatuTheme.choice();
+      window.ChatuTheme.setDevice(from !== 'device' ? 'light' : (c === 'light' ? 'dark' : ''));
+      paint();
+      const clr = document.querySelector('[data-theme-device-clear]'); if (clr) clr.hidden = window.ChatuTheme.from() !== 'device';
+    });
+    paint();
+  }
+  const sel = document.querySelector('select[data-theme-account]');
+  if (sel && window.ChatuTheme) sel.addEventListener('change', () => { window.ChatuTheme.setAccount(sel.value); paint(); });
+  const clear = document.querySelector('[data-theme-device-clear]');
+  if (clear && window.ChatuTheme) {
+    clear.addEventListener('click', () => { window.ChatuTheme.setDevice(''); paint(); clear.hidden = true; });
+    clear.hidden = window.ChatuTheme.from() !== 'device';
+  }
+
+  // ----- the menu: groups fold; the ones you opened stay open from page to page; the group you are in is always open
+  const nav = document.getElementById('sidenav');
+  if (!nav) return;
+  const K_MENU = 'chatu.menu.open';
+  let keep = [];
+  try { keep = JSON.parse(localStorage.getItem(K_MENU) || '[]'); } catch (e) { keep = []; }
+  const groups = [...nav.querySelectorAll('details.grp')];
+  let finding = false;
+  groups.forEach((d) => {
+    if (keep.includes(d.dataset.grp)) d.open = true;
+    d.addEventListener('toggle', () => {
+      if (finding) return;
+      const open = groups.filter((x) => x.open && !x.hasAttribute('data-here')).map((x) => x.dataset.grp);
+      try { localStorage.setItem(K_MENU, JSON.stringify(open)); } catch (e) { /* private mode */ }
+    });
+  });
+  const mbtn = document.querySelector('.menu-btn');
+  if (mbtn) {
+    mbtn.addEventListener('click', () => {
+      const open = nav.classList.toggle('open');
+      mbtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open) { const q = nav.querySelector('[data-menu-find]'); if (q && window.matchMedia('(min-width: 821px)').matches) q.focus(); }
+    });
+  }
+  // menu search: words in any order, part of a word; the group's name counts too. Enter opens the first one shown.
+  const q = nav.querySelector('[data-menu-find]');
+  const none = nav.querySelector('.menu-none');
+  if (q) {
+    const was = new Map(groups.map((d) => [d, d.open]));
+    const norm = (t) => t.toLowerCase().replace(/\s+/g, ' ').trim();
+    const run = () => {
+      const words = norm(q.value).split(' ').filter(Boolean);
+      finding = true;
+      let shown = 0;
+      nav.querySelectorAll('a').forEach((a) => {
+        const grp = a.closest('details.grp');
+        const hay = norm(a.textContent + ' ' + (grp ? grp.dataset.grp : ''));
+        const hit = !words.length || words.every((w) => hay.includes(w));
+        a.hidden = !hit;
+        a.classList.toggle('found', !!words.length && hit);
+        if (hit) shown++;
+      });
+      groups.forEach((d) => {
+        const any = [...d.querySelectorAll('a')].some((a) => !a.hidden);
+        d.hidden = !!words.length && !any;
+        d.open = words.length ? any : was.get(d);
+      });
+      if (none) none.hidden = !words.length || shown > 0;
+      finding = false;
+    };
+    q.addEventListener('focus', () => { if (!q.value) groups.forEach((d) => was.set(d, d.open)); });
+    q.addEventListener('input', run);
+    q.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { const a = [...nav.querySelectorAll('a')].find((x) => !x.hidden && x.classList.contains('found')); if (a) { e.preventDefault(); location.href = a.href; } }
+      if (e.key === 'Escape') { q.value = ''; run(); }
+    });
+  }
 })();

@@ -77,7 +77,7 @@ foreach ($groups as $items) {
 }
 $active = static fn (string $href): bool => $href === $best;
 ?><!doctype html>
-<html lang="en">
+<html lang="en" data-theme-pref="<?= esc($me ? \App\Libraries\Core\Auth::theme() : 'auto', 'attr') ?>">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -87,13 +87,16 @@ $active = static fn (string $href): bool => $href === $best;
 <link rel="icon" href="<?= base_url('static/brand/favicon-64.png') ?>" type="image/png">
 <link rel="apple-touch-icon" href="<?= base_url('static/brand/apple-touch-icon.png') ?>">
 <link rel="stylesheet" href="<?= base_url('static/app.css?v=' . \App\Libraries\Core\Audit::APP_VERSION) ?>">
+<?php if (($org ?? null) && \App\Libraries\Admin\Theme::current()[0] !== 'green'): ?><link rel="stylesheet" href="<?= site_url('brand.css') ?>?o=<?= (int) $org['id'] ?>&amp;v=<?= \App\Libraries\Admin\Theme::tag() ?>"><?php endif ?>
+<script src="<?= base_url('static/theme.js?v=' . \App\Libraries\Core\Audit::APP_VERSION) ?>"></script>
 <script src="<?= base_url('static/app.js?v=' . \App\Libraries\Core\Audit::APP_VERSION) ?>" defer></script>
 </head>
-<body<?= $me ? ' data-live="' . site_url('live') . '" data-live-user="' . (int) $me['id'] . '"' : '' ?> data-base="<?= esc(rtrim(base_url(), '/'), 'attr') ?>"<?= \App\Libraries\Core\Auth::id() ? ' data-uid="' . (int) \App\Libraries\Core\Auth::id() . '"' . (\App\Libraries\Core\Access::can('stock.view') ? ' data-snapshot="1"' : '') : '' ?>>
+<body<?= $me ? ' data-live="' . site_url('live') . '" data-live-user="' . (int) $me['id'] . '" data-alerts-dismiss="' . site_url('live/aside') . '"' : '' ?> data-base="<?= esc(rtrim(base_url(), '/'), 'attr') ?>"<?= \App\Libraries\Core\Auth::id() ? ' data-uid="' . (int) \App\Libraries\Core\Auth::id() . '"' . (\App\Libraries\Core\Access::can('stock.view') ? ' data-snapshot="1"' : '') : '' ?>>
 <a class="skip" href="#main">Skip to content</a>
 <div id="net-banner" class="net-banner" role="status" hidden>You are offline. Nothing can be saved until you are back online.</div>
 <?= view('_signin_banner') ?>
 <header class="topbar">
+  <?php if ($me): ?><button class="menu-btn" type="button" aria-controls="sidenav" aria-expanded="false">Menu</button><?php endif ?>
   <a class="brand" href="<?= site_url('/') ?>"><img src="<?= base_url('static/brand/mark-96.png') ?>" alt="" width="40" height="30"><span><span class="name"><?= esc(\App\Libraries\Core\Settings::get('app_name')) ?></span><span class="by"><?= esc(($org ?? null) ? (\App\Libraries\Core\Settings::get('company_name') ?: $org['name']) : 'by Chatu Innovations') ?></span></span></a>
   <?php if ($me): ?>
     <?php if (count($orgs ?? []) > 1 && ! ($single ?? true)): ?>
@@ -121,6 +124,7 @@ $active = static fn (string $href): bool => $href === $best;
     <?php endif ?>
     <nav class="topnav" aria-label="Account">
       <a href="<?= site_url('notifications') ?>" class="bell<?= ($unread ??= 0) ? ' has-unread' : '' ?>">Messages<?= $unread ? ' <span class="count">' . $unread . '</span>' : '' ?></a>
+      <button type="button" class="theme-btn" data-theme-toggle aria-label="Light or dark"><span class="ti" aria-hidden="true"></span><span class="tl">Auto</span></button>
       <a href="<?= site_url('account') ?>"><?= esc($me['name']) ?></a>
       <form method="post" action="<?= site_url('logout') ?>" class="inline"><?= csrf_field() ?><button class="linkish" type="submit">Sign out</button></form>
     </nav>
@@ -128,12 +132,18 @@ $active = static fn (string $href): bool => $href === $best;
 </header>
 <div class="shell<?= $me ? '' : ' no-nav' ?>">
   <?php if ($me): ?>
-  <nav class="sidenav" aria-label="Main">
-    <?php foreach ($groups as $g => $items): $shown = array_filter($items, static fn ($i) => $i[2]); if (! $shown) continue; ?>
-      <?php if ($g !== ''): ?><span class="grp"><?= esc($g) ?></span><?php endif ?>
-      <?php foreach ($shown as [$href, $label]): ?>
-        <a href="<?= site_url(ltrim($href, '/')) ?>" class="<?= $active($href) ? 'on' : '' ?>"<?= $active($href) ? ' aria-current="page"' : '' ?>><?= esc($label) ?></a>
-      <?php endforeach ?>
+  <nav class="sidenav" id="sidenav" aria-label="Main">
+    <?php // core 1.3 (C6): groups that fold, the one you are in open; menu search; a Menu button on phones ?>
+    <div class="menu-find"><label class="sr" for="menu-q">Find in the menu</label><input type="search" id="menu-q" placeholder="Find in the menu" autocomplete="off" data-menu-find><p class="menu-none small muted" hidden>Nothing in the menu by that name.</p></div>
+    <?php foreach ($groups as $g => $items): $shown = array_filter($items, static fn ($i) => $i[2]); if (! $shown) continue;
+          $here = (bool) array_filter($shown, static fn ($i) => $active($i[0])); ?>
+      <?php if ($g === ''): ?>
+        <?php foreach ($shown as [$href, $label]): ?><a href="<?= site_url(ltrim($href, '/')) ?>" class="<?= $active($href) ? 'on' : '' ?>"<?= $active($href) ? ' aria-current="page"' : '' ?>><?= esc($label) ?></a><?php endforeach ?>
+      <?php else: ?>
+      <details class="grp" data-grp="<?= esc($g, 'attr') ?>"<?= $here ? ' open data-here' : '' ?>><summary><?= esc($g) ?> <span class="n"><?= count($shown) ?></span></summary>
+        <?php foreach ($shown as [$href, $label]): ?><a href="<?= site_url(ltrim($href, '/')) ?>" class="<?= $active($href) ? 'on' : '' ?>"<?= $active($href) ? ' aria-current="page"' : '' ?>><?= esc($label) ?></a><?php endforeach ?>
+      </details>
+      <?php endif ?>
     <?php endforeach ?>
   </nav>
   <?php endif ?>
