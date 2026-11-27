@@ -231,6 +231,118 @@ final class Users
         Access::flush();
     }
 
+    /**
+     * Who works where (core 1.2, B4): every active member with their roles, and the warehouses they work at. People
+     * who work at every warehouse (the account owner, "every warehouse") are listed once, apart.
+     */
+    public static function whoWorksWhere(): array
+    {
+        Access::require('user.view');
+        $tid  = Tenancy::require();
+        $whs  = Db::rows('SELECT id, code, name, active FROM {warehouses} WHERE tenant_id = ? ORDER BY active DESC, code', [$tid]);
+        $ppl  = Db::rows("SELECT u.id, u.name, u.username, tu.is_account_owner, tu.all_warehouses, tu.department,
+                                 (SELECT GROUP_CONCAT(r.name ORDER BY r.rank_level DESC, r.name SEPARATOR ', ')
+                                    FROM {user_roles} ur JOIN {roles} r ON r.id = ur.role_id AND r.tenant_id = ur.tenant_id
+                                   WHERE ur.tenant_id = tu.tenant_id AND ur.user_id = u.id) roles
+                            FROM {tenant_users} tu JOIN {users} u ON u.id = tu.user_id
+                           WHERE tu.tenant_id = ? AND tu.status = 'active' ORDER BY u.name", [$tid]);
+        $at = [];
+        foreach (Db::rows('SELECT user_id, warehouse_id FROM {member_warehouses} WHERE tenant_id = ?', [$tid]) as $r) {
+            $at[(int) $r['user_id']][(int) $r['warehouse_id']] = true;
+        }
+        foreach ($ppl as &$p) {
+            $p['every'] = (int) $p['is_account_owner'] || (int) $p['all_warehouses'];
+            $p['at']    = $p['every'] ? [] : array_keys($at[(int) $p['id']] ?? []);
+        }
+        unset($p);
+        return ['warehouses' => $whs, 'people' => $ppl];
+    }
+
+    /** One warehouse's team: who works there (by name or as "every warehouse"), and who could be added. */
+    public static function team(int $warehouseId): array
+    {
+        Access::require('user.view');
+        $w   = \App\Libraries\Master\Warehouses::get($warehouseId);
+        $all = self::whoWorksWhere()['people'];
+        $here = $every = $others = [];
+        foreach ($all as $p) {
+            if ($p['every']) {
+                $every[] = $p;
+            } elseif (in_array($warehouseId, $p['at'], true)) {
+                $here[] = $p;
+            } else {
+                $others[] = $p;
+            }
+        }
+        return ['w' => $w, 'here' => $here, 'every' => $every, 'others' => $others];
+    }
+
+    /**
+     * Give a warehouse its team (core 1.2, B4): $add and $remove are people whose usual warehouses gain or lose this
+     * one. The same rules as a person's own page: People, Edit; never your own access; the account owner and people
+     * at every warehouse stay as they are; only a warehouse you work at yourself. Each change is in the audit log.
+     */
+    public static function setTeam(int $warehouseId, array $add, array $remove): array
+    {
+        Access::require('user.update');
+        $tid = Tenancy::require();
+        \App\Libraries\Master\Warehouses::get($warehouseId);
+        $mine = Access::memberWarehouses((int) Auth::id());
+        if (! $mine['all'] && ! in_array($warehouseId, $mine['ids'], true)) {
+            throw new DeniedException('That warehouse is not one of yours, so you cannot change who works there.');
+        }
+        $add    = array_values(array_unique(array_map('intval', $add)));
+        $remove = array_values(array_diff(array_unique(array_map('intval', $remove)), $add));
+        $done   = ['added' => [], 'removed' => [], 'left_without' => []];
+        if (! $add && ! $remove) {
+            return $done;
+        }
+        foreach (array_merge($add, $remove) as $uid) {
+            if ($uid === (int) Auth::id()) {
+                throw new DeniedException('You cannot change your own access. Ask another administrator.');
+            }
+            $m = Db::row("SELECT status, is_account_owner, all_warehouses FROM {tenant_users} WHERE tenant_id = ? AND user_id = ?", [$tid, $uid]);
+            if (! $m) {
+                throw new NotFoundException('Person not found.');
+            }
+            if ((int) $m['is_account_owner'] || (int) $m['all_warehouses']) {
+                throw new BizException(self::get($uid)['name'] . ' works at every warehouse. Change that on their own page.');
+            }
+            if (in_array($uid, $add, true) && $m['status'] !== 'active') {
+                throw new BizException(self::get($uid)['name'] . ' is switched off here.');
+            }
+        }
+        Db::atomic(static function () use ($tid, $warehouseId, $add, $remove, &$done) {
+            foreach ($add as $uid) {
+                if (Db::value('SELECT 1 FROM {member_warehouses} WHERE tenant_id = ? AND user_id = ? AND warehouse_id = ?', [$tid, $uid, $warehouseId])) {
+                    continue;
+                }
+                $old = self::access($uid);
+                Db::insert('member_warehouses', ['tenant_id' => $tid, 'user_id' => $uid, 'warehouse_id' => $warehouseId]);
+                Access::flush();
+                Audit::log('user.access', 'user', $uid, $old, self::access($uid) + ['via' => 'warehouse team']);
+                $done['added'][] = $uid;
+            }
+            foreach ($remove as $uid) {
+                if (! Db::value('SELECT 1 FROM {member_warehouses} WHERE tenant_id = ? AND user_id = ? AND warehouse_id = ?', [$tid, $uid, $warehouseId])) {
+                    continue;
+                }
+                $old = self::access($uid);
+                Db::exec('DELETE FROM {member_warehouses} WHERE tenant_id = ? AND user_id = ? AND warehouse_id = ?', [$tid, $uid, $warehouseId]);
+                Access::flush();
+                $new = self::access($uid);
+                Audit::log('user.access', 'user', $uid, $old, $new + ['via' => 'warehouse team']);
+                $done['removed'][] = $uid;
+                if (! $new['warehouses']) {
+                    $done['left_without'][] = $uid;
+                }
+            }
+            self::keepAdmin();
+        });
+        Access::flush();
+        return $done;
+    }
+
     /** What a person holds here: roles (ids), all_warehouses, warehouses (ids), perms (direct codes). */
     public static function access(int $userId): array
     {

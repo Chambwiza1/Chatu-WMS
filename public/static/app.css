@@ -585,3 +585,11 @@ table.kv th { text-align: left; color: var(--ink-2); font-weight: 600; padding-r
 /* core 1.5.4: sign-up */
 .login.signup{width:min(34rem,100%)}
 .field.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* 0.3.9 (core 1.2, B4): who works where */
+.where-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.where-card { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: 10px; background: var(--panel); text-decoration: none; color: inherit; }
+.where-card:hover, .where-card:focus-visible { border-color: var(--patina); }
+table.where-grid td.c, table.where-grid th.c { text-align: center; width: 64px; }
+table.where-grid td.every { text-align: left; white-space: nowrap; color: var(--ink-2); font-style: italic; }
+table.where-grid .tick { color: var(--patina); font-weight: 700; }

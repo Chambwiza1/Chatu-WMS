@@ -39,6 +39,7 @@ if ($me) {
         'Set up' => [
             ['/warehouses', 'Warehouses and bins', can('warehouse.setup')],
             ['/admin', 'Administration', can('user.view') || can('role.view') || can('admin.settings')],
+            ['/admin/where', 'Who works where', can('user.view')],
             ['/admin/support', 'Support access', can('role.update')],
             ['/billing', 'Plan and billing', ! ($single ?? true) && (can('billing.manage') || can('admin.settings'))],
             ['/audit', 'Audit log', can('audit.view')],
@@ -62,9 +63,19 @@ if ($me) {
         ];
     }
 }
-$active = static function (string $href) use ($path): bool {
+$matches = static function (string $href) use ($path): bool {
     return $href === '/' ? $path === '/' : ($path === $href || str_starts_with($path, $href . '/'));
 };
+// only the closest menu entry is marked: /admin/where marks "Who works where", not "Administration" too
+$best = '';
+foreach ($groups as $items) {
+    foreach ($items as $i) {
+        if ($i[2] && $matches($i[0]) && strlen($i[0]) > strlen($best)) {
+            $best = $i[0];
+        }
+    }
+}
+$active = static fn (string $href): bool => $href === $best;
 ?><!doctype html>
 <html lang="en">
 <head>

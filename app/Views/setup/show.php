@@ -1,6 +1,6 @@
 <?= $this->extend('layout') ?>
 <?= $this->section('content') ?>
-<div class="page-head"><div><h1><?= esc($w['code']) ?> <?= esc($w['name']) ?></h1><p class="sub"><?= esc(ucfirst($w['kind'])) ?><?= $w['town'] ? ' · ' . esc($w['town']) : '' ?></p></div><div class="actions"><a class="btn secondary" href="<?= site_url('labels/bins/' . $w['id']) ?>">Print bin labels</a></div></div>
+<div class="page-head"><div><h1><?= esc($w['code']) ?> <?= esc($w['name']) ?></h1><p class="sub"><?= esc(ucfirst($w['kind'])) ?><?= $w['town'] ? ' · ' . esc($w['town']) : '' ?></p></div><div class="actions"><?php if (can('user.view')): ?><a class="btn secondary" href="<?= site_url('admin/where/' . $w['id']) ?>">Team</a><?php endif ?><a class="btn secondary" href="<?= site_url('labels/bins/' . $w['id']) ?>">Print bin labels</a></div></div>
 <div class="split2"><div>
 <h2>Bins</h2>
 <div class="table-wrap"><table><thead><tr><th>Bin</th><th>Zone</th><th>Type</th><th>Pick from</th><th class="num">Units</th><th>Status</th><th class="no-print"></th></tr></thead><tbody>

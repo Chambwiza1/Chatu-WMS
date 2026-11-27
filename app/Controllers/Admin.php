@@ -130,6 +130,36 @@ class Admin extends BaseController
         }, site_url('admin/users/' . $id));
     }
 
+    /** Who works where (core 1.2, B4): people by warehouse. */
+    public function where()
+    {
+        return $this->page(function () {
+            return $this->render('admin/where', Users::whoWorksWhere(), 'Who works where');
+        });
+    }
+
+    /** One warehouse's team, to add people to it or take them off. */
+    public function team(int $warehouseId)
+    {
+        return $this->page(function () use ($warehouseId) {
+            $t = Users::team($warehouseId);
+            return $this->render('admin/team', $t, 'Team at ' . $t['w']['code']);
+        });
+    }
+
+    public function saveTeam(int $warehouseId)
+    {
+        return $this->act(function () use ($warehouseId) {
+            $add    = (array) ($this->request->getPost('add') ?? []);
+            $remove = (string) $this->in('remove', '') !== '' ? [(int) $this->in('remove')] : [];
+            $d = Users::setTeam($warehouseId, $add, $remove);
+            $msg = ! $d['added'] && ! $d['removed'] ? 'Nothing changed.'
+                : trim(($d['added'] ? count($d['added']) . ' added to the team. ' : '') . ($d['removed'] ? count($d['removed']) . ' taken off the team. ' : '')
+                . ($d['left_without'] ? 'Note: ' . implode(', ', array_map(static fn ($u) => Users::get($u)['name'], $d['left_without'])) . ' now works at no warehouse.' : ''));
+            return $this->ok($msg, 'admin/where/' . $warehouseId);
+        }, site_url('admin/where/' . $warehouseId));
+    }
+
     /** Roles, warehouses and direct permissions of a person, in one save. */
     public function saveAccess(int $id)
     {

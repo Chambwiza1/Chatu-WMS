@@ -188,6 +188,9 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/users', 'Admin::createUser');
     $routes->post('admin/users/existing', 'Admin::addExisting');
     $routes->get('admin/users/(:num)', 'Admin::user/$1');
+    $routes->get('admin/where', 'Admin::where');
+    $routes->get('admin/where/(:num)', 'Admin::team/$1');
+    $routes->post('admin/where/(:num)', 'Admin::saveTeam/$1');
     $routes->post('signin-as/(:num)', 'SignIn::start/$1');               // core 1.2: sign in as one of your people
     $routes->get('admin/support', 'SignIn::index');
     $routes->post('admin/support', 'SignIn::allow');

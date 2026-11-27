@@ -1,7 +1,7 @@
 <?= $this->extend('layout') ?>
 <?= $this->section('content') ?>
 <div class="page-head"><div><h1>People and access</h1><p class="sub">Everyone who signs in to <?= esc($org['name']) ?>: their roles, the warehouses they work at, and permissions given to them directly.</p></div>
-<div class="actions"><?php if (can('role.view')): ?><a class="btn secondary" href="<?= site_url('admin/roles') ?>">Roles</a><?php endif ?></div></div>
+<div class="actions"><a class="btn secondary" href="<?= site_url('admin/where') ?>">Who works where</a><?php if (can('role.view')): ?><a class="btn secondary" href="<?= site_url('admin/roles') ?>">Roles</a><?php endif ?></div></div>
 <div class="table-wrap"><table><thead><tr><th>Name</th><th>Username</th><th>Department</th><th>Roles</th><th>Warehouses</th><th>Last sign-in</th><th>Status</th></tr></thead><tbody>
 <?php foreach ($rows as $u): ?><tr class="<?= $u['member_status'] === 'active' ? '' : 'muted' ?>"><td><a href="<?= site_url('admin/users/' . $u['id']) ?>"><?= esc($u['name']) ?></a><?= $u['is_account_owner'] ? ' <span class="badge info">Account owner</span>' : '' ?></td><td><?= esc($u['username']) ?></td><td><?= esc($u['department'] ?? $u['position']) ?></td>
 <td><?= $u['is_account_owner'] ? 'Everything' : (esc((string) $u['roles']) ?: '<span class="muted">none</span>') ?><?= (int) $u['direct'] ? ' <span class="badge quiet">+' . (int) $u['direct'] . ' direct</span>' : '' ?></td>
