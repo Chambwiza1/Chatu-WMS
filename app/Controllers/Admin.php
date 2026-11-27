@@ -32,18 +32,20 @@ class Admin extends BaseController
         'live_alerts'       => ['Alerts pop up (1 = yes, 0 = no)', 'What waits for each person (approvals, transfers arriving, expired batches, items to reorder, fleet papers) pops up once per sign-in, and again when it changes.'],
         'session_idle_minutes' => ['Sign out after idle (minutes)', ''],
         'single_session'    => ['One sign-in per account (1 = on, 0 = off)', 'On: signing in on another device or browser signs the first one out, and it is told why.'],
-        'mail_from'         => ['E-mail sender address', 'Leave empty to send no e-mail.'],
+        'mail_from'         => ['E-mail sender address (the installation)', 'For password resets and the platform\'s own messages. On the online service each organisation sends its own e-mail from Administration > Messages. Leave empty to send no e-mail.'],
         'mail_from_name'    => ['E-mail sender name', ''],
         'smtp_host'         => ['SMTP server', 'Empty: the server\'s own mail.'],
         'smtp_port'         => ['SMTP port', ''],
         'smtp_user'         => ['SMTP user', ''],
         'smtp_pass'         => ['SMTP password', ''],
         'web_cron'          => ['Run scheduled jobs on page visits (1 = yes)', 'Only if the host has no cron.'],
+        'wa_verify_token'   => ['WhatsApp webhook word', 'Any word you choose; give Meta the same one with the address /hooks/whatsapp, so it can send delivery reports.'],
+        'wa_transport'      => ['WhatsApp: send for real (live) or only write to the log (log)', 'log: to try an installation out before Meta approves the template.'],
         'max_upload_mb'     => ['Largest upload (MB)', 'Proof-of-delivery photos and scans.'],
     ];
 
     /** Settings an organisation keeps; the others belong to the installation (platform settings, or here in the single-company edition). */
-    public const PLATFORM_KEYS = ['session_idle_minutes', 'single_session', 'mail_from', 'mail_from_name', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'web_cron', 'max_upload_mb'];
+    public const PLATFORM_KEYS = ['session_idle_minutes', 'single_session', 'mail_from', 'mail_from_name', 'smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'web_cron', 'max_upload_mb', 'wa_verify_token', 'wa_transport'];
 
     /** The installation's settings, kept by the platform owner (or by the administrator in the single-company edition). */
     public static function platformFields(): array
@@ -245,6 +247,9 @@ class Admin extends BaseController
                     }
                     if (in_array($k, ['live_popups', 'live_sound', 'live_alerts', 'transfer_loss_note', 'single_session', 'web_cron'], true) && ! in_array($v, ['0', '1'], true)) {
                         throw new BizException(self::EDITABLE[$k][0] . ': 1 or 0.');
+                    }
+                    if ($k === 'wa_transport' && ! in_array($v, ['live', 'log'], true)) {
+                        throw new BizException('WhatsApp: live or log.');
                     }
                     if ($k === 'currency_code') {
                         $v = strtoupper($v);

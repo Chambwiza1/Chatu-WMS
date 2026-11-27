@@ -78,7 +78,7 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
-            'csrf' => ['except' => ['cron/run', 'pay/lenco/*']],
+            'csrf' => ['except' => ['cron/run', 'pay/lenco/*', 'hooks/whatsapp']],
             'invalidchars',
             'installed' => ['except' => ['install', 'install/*', 'sw.js', 'manifest.webmanifest', 'static/*']],
             'update'    => ['except' => ['install', 'install/*', 'sw.js', 'manifest.webmanifest', 'static/*', 'update', 'login', 'logout', 'health']],

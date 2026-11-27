@@ -46,6 +46,9 @@ final class PlatformTools
             if (in_array($k, ['session_idle_minutes', 'max_upload_mb', 'smtp_port'], true) && $v !== '' && ! ctype_digit($v)) {
                 throw new BizException($fields[$k][0] . ': give a whole number.');
             }
+            if ($k === 'wa_transport') {
+                $v = $v === 'log' ? 'log' : 'live';
+            }
             if ($k === 'mail_from' && $v !== '' && ! filter_var($v, FILTER_VALIDATE_EMAIL)) {
                 throw new BizException('Send e-mail from: that address is not valid.');
             }

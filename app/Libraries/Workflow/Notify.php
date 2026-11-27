@@ -111,7 +111,10 @@ final class Notify
         Db::exec('UPDATE {notifications} SET read_at = ? WHERE tenant_id <=> ? AND user_id = ? AND read_at IS NULL', [Db::now(), Tenancy::id(), $userId]);
     }
 
-    /** Send pending staff e-mails for every tenant (scheduled job). Returns how many were sent. */
+    /**
+     * Send the e-mail copies of the platform's own messages through the installation's mailer: to platform owners
+     * (integrity, sign-ups), and to an organisation's account owner about its plan, invoices and support sign-ins. An organisation's messages go through its own sender instead (core 1.4: Messaging\Messages).
+     */
     public static function sendEmails(int $limit = 50): int
     {
         $from = Settings::get('mail_from');
@@ -120,7 +123,7 @@ final class Notify
         }
         $rows = Db::unscoped(static fn () => Db::rows(
             "SELECT n.*, u.email, u.name, t.name tenant_name FROM {notifications} n JOIN {users} u ON u.id = n.user_id LEFT JOIN {tenants} t ON t.id = n.tenant_id
-              WHERE n.emailed_at IS NULL AND u.email IS NOT NULL AND u.email <> '' AND n.created_at > ? ORDER BY n.id LIMIT " . (int) $limit,
+              WHERE (n.tenant_id IS NULL OR n.type IN ('billing','support')) AND n.emailed_at IS NULL AND u.email IS NOT NULL AND u.email <> '' AND n.created_at > ? ORDER BY n.id LIMIT " . (int) $limit,
             [gmdate('Y-m-d H:i:s', time() - 3 * 86400)]
         ));
         $sent = 0;

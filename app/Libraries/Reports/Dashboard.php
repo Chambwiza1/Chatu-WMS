@@ -76,6 +76,13 @@ final class Dashboard
             $n = (int) Db::value("SELECT COUNT(*) FROM {items} i WHERE i.tenant_id = {tid} AND i.active = 1 AND i.reorder_level > 0 AND COALESCE((SELECT SUM(s.qty - s.qty_allocated) FROM {stock} s WHERE s.tenant_id = {tid} AND s.item_id = i.id AND s.status = 'available' AND s.warehouse_id IN ($w)), 0) <= i.reorder_level");
             $out[] = [$n, 'Items to reorder', 'At or below the reorder level', '/reports/reorder', $n ? 'warn' : ''];
         }
+        if (Access::can('admin.settings') && \App\Libraries\Core\Tenancy::id()) {
+            // core 1.4 (E5): business messages wait until the organisation's own sender is set
+            $w = \App\Libraries\Messaging\Outbox::waiting();
+            if ($w['email'] + $w['whatsapp'] > 0) {
+                $out[] = [$w['email'] + $w['whatsapp'], 'Messages waiting for your sender', 'Set your e-mail' . ($w['whatsapp'] ? ' and WhatsApp' : '') . ' under Messages', '/admin/messages', 'bad'];
+            }
+        }
         if (Access::can('admin.settings') || Access::can('stock.approve')) {
             $last = json_decode((string) Settings::get('last_reconcile'), true);
             if ($last && $last['problems'] > 0) {

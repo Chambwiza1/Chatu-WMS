@@ -186,6 +186,7 @@ final class Shipments
                 Db::exec("UPDATE {shipments} SET status = 'dispatched', dispatched_by = ?, dispatched_at = ?, value = ? WHERE tenant_id = {tid} AND id = ?", [Auth::id(), Db::now(), round($total, 2), $id]);
                 Sales::refresh((int) $s['so_id']);
                 Audit::log('shipment.dispatch', 'shipment', $id, null, ['value' => round($total, 2)]);
+                \App\Libraries\Messaging\Messages::shipment($id, 'dispatched');   // core 1.4: the customer is told
                 return $id;
             });
         });
@@ -210,6 +211,7 @@ final class Shipments
             Db::exec("UPDATE {trip_stops} SET status = 'done', done_at = ? WHERE tenant_id = {tid} AND kind = 'shipment' AND doc_id = ? AND status = 'pending'", [Db::now(), $id]);
             Sales::refresh((int) $s['so_id']);
             Audit::log('shipment.deliver', 'shipment', $id, null, ['received_by' => $receivedBy]);
+            \App\Libraries\Messaging\Messages::shipment($id, 'delivered');
         });
     }
 

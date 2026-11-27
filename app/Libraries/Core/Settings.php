@@ -23,6 +23,9 @@ final class Settings
         'web_cron'             => '0',
         'single_session'       => '1',     // core 1.1: signing in again ends the account's older session
         'max_upload_mb'        => '8',
+        'wa_transport'         => 'live',  // core 1.4: live, or log (write WhatsApp messages to the log only, to try an installation out)
+        'wa_api_version'       => 'v21.0',
+        'wa_verify_token'      => '',      // core 1.4: the word Meta sends when it checks the webhook address
     ];
 
     /** The organisation's own settings (per tenant). */
@@ -43,6 +46,8 @@ final class Settings
         'live_popups'          => '1',     // core 1.1 (E2): new messages pop up on screen and stay until closed
         'live_sound'           => '1',
         'live_alerts'          => '1',     // core 1.3 (E1): what waits for a person pops up too (approvals, expiry, reorder)
+        'notify_customers'     => '1',     // core 1.4 (E5): customers are told when their goods leave and arrive (if a sender is set)
+        'wa_mode'              => 'off',   // core 1.4 (E5): own (the organisation's WhatsApp Business number) or off
         'brand_theme'          => 'green', // core 1.3 (C2): a ready palette, or 'custom'
         'brand_primary'        => '',
         'brand_accent'         => '',

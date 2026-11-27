@@ -30,7 +30,10 @@ $routes->get('brand.css', 'BrandCss::css');   // core 1.3 (C2): the organisation
 // core 1.5b: payment gateways call these with no sign-in (signature checked, or DPO asked)
 $routes->post('pay/lenco/(:segment)', 'PayPublic::lenco/$1');
 $routes->get('pay/return', 'PayPublic::back');
-$routes->get('pay/go/(:segment)', 'PayPublic::go/$1'); // the step to DPO's page (a form may not redirect off this site)
+$routes->get('pay/go/(:segment)', 'PayPublic::go/$1');
+// core 1.4: WhatsApp delivery reports (signed with the organisation's own app secret)
+$routes->get('hooks/whatsapp', 'Hooks\WhatsApp::verify');
+$routes->post('hooks/whatsapp', 'Hooks\WhatsApp::receive'); // the step to DPO's page (a form may not redirect off this site)
 
 // signed in, any organisation or none
 $routes->group('', ['filter' => 'auth'], static function ($routes) {
@@ -211,7 +214,14 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/settings', 'Admin::saveSettings');
     $routes->post('admin/reasons', 'Admin::saveReason');
     $routes->post('admin/logo', 'Admin::logo');
-    $routes->post('admin/theme', 'Admin::theme');                        // core 1.3 (C2): the organisation's colours
+    $routes->post('admin/theme', 'Admin::theme');
+    $routes->get('admin/messages', 'Messaging::index');                  // core 1.4 (E5): the organisation's own senders, the outbox
+    $routes->post('admin/messages/email', 'Messaging::saveEmail');
+    $routes->post('admin/messages/whatsapp', 'Messaging::saveWhatsApp');
+    $routes->post('admin/messages/test', 'Messaging::test');
+    $routes->post('admin/messages/customers', 'Messaging::notify');
+    $routes->post('admin/messages/(:num)/retry', 'Messaging::retry/$1');
+    $routes->post('admin/messages/(:num)/cancel', 'Messaging::cancel/$1');                        // core 1.3 (C2): the organisation's colours
     $routes->get('brand/logo', 'Admin::logoFile');
     $routes->get('admin/reconcile', 'Admin::reconcile');
     $routes->post('admin/reconcile', 'Admin::runReconcile');

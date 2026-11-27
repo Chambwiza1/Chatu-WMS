@@ -669,3 +669,8 @@ input[type=color] { width: 72px; height: 40px; padding: 2px; }
 :root[data-theme="dark"] .label, :root[data-theme="dark"] .labels .lbl, :root[data-theme="dark"] svg.barcode, :root[data-theme="dark"] .barcode { background: #fff; color: #10281a; }
 @media print { :root[data-theme="dark"] { --paper: #fff; --panel: #fff; --ink: #000; --ink-2: #333; --rule: #ccc; --steel-1: #f2f2f2; --patina-ink: #0e5223; --patina-wash: #eee; color-scheme: light; } :root[data-theme="dark"] body { background: #fff; color: #000; } :root[data-theme="dark"] a { color: #000; } }
 .btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+/* 0.5.0 (core 1.4): Administration > Messages */
+.panel.stack { align-content: start; }
+.msg-filter { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
+.msg-filter select, .msg-filter input { width: auto; min-width: 12rem; }

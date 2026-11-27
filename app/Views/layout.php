@@ -40,6 +40,7 @@ if ($me) {
             ['/warehouses', 'Warehouses and bins', can('warehouse.setup')],
             ['/admin', 'Administration', can('user.view') || can('role.view') || can('admin.settings')],
             ['/admin/where', 'Who works where', can('user.view')],
+            ['/admin/messages', 'Messages sent', can('admin.settings') && ($org ?? null)],
             ['/admin/support', 'Support access', can('role.update')],
             ['/billing', 'Plan and billing', ! ($single ?? true) && (can('billing.manage') || can('admin.settings'))],
             ['/audit', 'Audit log', can('audit.view')],

@@ -60,4 +60,8 @@
 <div><button class="btn" type="submit">Receive the return</button></div></form></details>
 <?php endif ?>
 <?php if ($returns): ?><h2>Returns</h2><ul><?php foreach ($returns as $r): ?><li><?= esc($r['number']) ?> (<?= esc(str_replace('_', ' ', $r['kind'])) ?>, <?= esc($r['reason_code']) ?>) <?= local_time($r['posted_at']) ?> by <?= esc($r['user']) ?><?= $r['notes'] ? ': ' . esc($r['notes']) : '' ?></li><?php endforeach ?></ul><?php endif ?>
+<?php if ($msgs ?? []): ?><h2>Messages to the customer</h2>
+<div class="table-wrap"><table><thead><tr><th>When</th><th>How</th><th>To</th><th>Status</th></tr></thead><tbody>
+<?php foreach ($msgs as $m): ?><tr><td><?= local_time($m['created_at']) ?></td><td><?= $m['channel'] === 'whatsapp' ? 'WhatsApp' : 'E-mail' ?></td><td><?= esc($m['recipient']) ?></td><td><?= esc(\App\Libraries\Messaging\Outbox::LABELS[$m['status']] ?? $m['status']) ?><?= $m['error'] && $m['status'] !== 'sent' ? ' <span class="small muted">' . esc($m['error']) . '</span>' : '' ?></td></tr><?php endforeach ?>
+</tbody></table></div><?php endif ?>
 <?= $this->endSection() ?>

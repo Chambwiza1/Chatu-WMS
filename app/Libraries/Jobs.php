@@ -30,7 +30,7 @@ final class Jobs
         $out   = [];
         try {
             Tenancy::run(null, static function () use (&$out, $start) {
-                $out['emails'] = Notify::sendEmails();
+                $out['emails'] = Notify::sendEmails();   // the platform's own messages only (core 1.4)
                 Db::exec('DELETE FROM {op_tokens} WHERE created_at < ?', [gmdate('Y-m-d H:i:s', time() - 30 * 86400)]);
                 // core 1.5: online payments still waiting are checked; once a day, trials and overdue invoices
                 $out['payments'] = \App\Libraries\Platform\Pay::reconcile()['settled'];
@@ -92,7 +92,12 @@ final class Jobs
         if (Settings::get('last_daily') !== date('Y-m-d')) {
             $out['notified'] = self::daily()['notified'];
             Settings::set('last_daily', date('Y-m-d'));
+            \App\Libraries\Messaging\Outbox::housekeeping();
         }
+        // core 1.4 (E5): e-mail copies of its people's messages, then whatever its own senders can send now
+        $out['queued'] = \App\Libraries\Messaging\Messages::staffCopies();
+        $sent          = \App\Libraries\Messaging\Outbox::process(50, 15.0);
+        $out['sent']   = $sent['sent'];
         return $out;
     }
 

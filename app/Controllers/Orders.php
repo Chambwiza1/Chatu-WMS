@@ -146,6 +146,7 @@ class Orders extends BaseController
         }
         return $this->render('orders/shipment', ['s' => $s, 'lines' => Shipments::lines($id), 'picks' => Shipments::pickList($id), 'units' => Shipments::units($id),
             'files' => Db::rows("SELECT * FROM {attachments} WHERE tenant_id = {tid} AND owner_type = 'shipment' AND owner_id = ?", [$id]),
+            'msgs' => \App\Libraries\Messaging\Outbox::forObject('shipment', $id),
             'returns' => Db::rows('SELECT r.*, u.name user FROM {customer_returns} r LEFT JOIN {users} u ON u.id = r.posted_by WHERE r.tenant_id = {tid} AND r.shipment_id = ? ORDER BY r.id', [$id]),
             'failReasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'failed_delivery' AND active = 1 ORDER BY label"),
             'returnReasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'customer_return' AND active = 1 ORDER BY label")], $s['number']);
