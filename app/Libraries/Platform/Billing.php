@@ -132,9 +132,11 @@ final class Billing
     }
 
     /** Put an organisation on a plan (or none). The plan's module rules apply from now. */
-    public static function assignPlan(int $tenantId, ?int $planId, string $reason = ''): void
+    public static function assignPlan(int $tenantId, ?int $planId, string $reason = '', bool $system = false): void
     {
-        Access::requirePlatform('platform.tenants');
+        if (! $system) {   // $system: the organisation's own choice, through PlanRequests (core 1.5.5)
+            Access::requirePlatform('platform.tenants');
+        }
         $t = self::tenant($tenantId);
         $plan = $planId ? self::plan($planId) : null;
         if ($planId && (! $plan || ! $plan['active'])) {
@@ -148,7 +150,7 @@ final class Billing
                 }
             }
         }
-        Db::atomic(static function () use ($t, $plan, $planId, $reason, $tenantId) {
+        Db::atomic(static function () use ($t, $plan, $planId, $reason, $tenantId, $system) {
             Db::exec('UPDATE {tenants} SET plan_id = ? WHERE id = ?', [$planId ?: null, $tenantId]);
             if ($plan) {
                 Modules::applyPlan($tenantId, $plan['module_rules'], 'Plan ' . $plan['code']);
@@ -156,7 +158,7 @@ final class Billing
             $before = ['plan_id' => $t['plan_id']];
             $after  = ['plan_id' => $planId ?: null, 'plan' => $plan['code'] ?? null];
             Tenancy::run(null, static fn () => Audit::log('tenant.plan', 'tenant', $tenantId, $before, $after, 'success', $reason !== '' ? $reason : null));
-            Tenancy::run($tenantId, static fn () => Audit::log('tenant.plan', 'tenant', $tenantId, $before, $after, 'success', 'By the platform owner'));
+            Tenancy::run($tenantId, static fn () => Audit::log('tenant.plan', 'tenant', $tenantId, $before, $after, 'success', $system ? 'Chosen by the organisation' : 'By the platform owner'));
         });
     }
 

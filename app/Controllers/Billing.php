@@ -12,6 +12,7 @@ use App\Libraries\Core\Tenancy;
 use App\Libraries\Platform\Billing as B;
 use App\Libraries\Platform\Modules;
 use App\Libraries\Platform\Pay;
+use App\Libraries\Platform\PlanRequests;
 use App\Libraries\Platform\Product;
 
 /**
@@ -23,11 +24,8 @@ class Billing extends BaseController
 {
     private function mayBill(): void
     {
-        $tid = Tenancy::require();
-        $owner = (bool) Db::value('SELECT is_account_owner FROM {tenant_users} WHERE tenant_id = ? AND user_id = ? AND status = \'active\'', [$tid, (int) Auth::id()]);
-        if (! $owner && ! Access::can('admin.settings') && ! Access::can('billing.manage')) {
-            throw new DeniedException('Billing is for the account owner and those given Settings, Plan and billing (billing.manage).');
-        }
+        Tenancy::require();
+        PlanRequests::requireMay();   // core 1.5.5: the account owner, Settings, or "Plan and billing" (accountants)
     }
 
     public function index()
@@ -37,7 +35,9 @@ class Billing extends BaseController
             $tid = Tenancy::require();
             $t = B::tenant($tid);
             return $this->render('billing/index', ['t' => $t, 'limits' => B::limits($tid), 'days' => B::trialDaysLeft($t), 'rows' => B::invoices($tid, 100),
-                'single' => Tenancy::single(), 'currency' => B::currency()], 'Billing');
+                'single' => Tenancy::single(), 'currency' => B::currency(), 'offered' => Tenancy::single() ? [] : PlanRequests::offered(),
+                'requests' => Tenancy::single() ? [] : PlanRequests::list($tid), 'isOwner' => PlanRequests::isOwner($tid),
+                'unpaid' => Db::value("SELECT number FROM {platform_invoices} WHERE tenant_id = ? AND status = 'issued' ORDER BY id LIMIT 1", [$tid])], 'Billing');
         });
     }
 
@@ -108,5 +108,36 @@ class Billing extends BaseController
             Modules::setOwn((string) $this->in('module', ''), $this->in('on') === '1');
             return $this->ok('Saved.', 'admin/modules');
         }, site_url('admin/modules'));
+    }
+
+    // ---- core 1.5.5: choose a plan and ask for an invoice ------------------------------------------------------
+
+    public function requestPlan()
+    {
+        return $this->act(function () {
+            $r = PlanRequests::ask((int) $this->in('plan_id', 0), (int) $this->in('months', 1));
+            return $r['invoice']
+                ? $this->ok('Your invoice is issued. Pay it online, or by bank or mobile money.', 'billing/invoices/' . $r['invoice'])
+                : $this->ok('Sent to the account owner to approve.', 'billing');
+        }, site_url('billing'));
+    }
+
+    public function decideRequest(int $id)
+    {
+        return $this->act(function () use ($id) {
+            if ($this->in('do', '') === 'approve') {
+                return $this->ok('Approved. The invoice is issued.', 'billing/invoices/' . PlanRequests::approve($id));
+            }
+            PlanRequests::reject($id, (string) $this->in('reason', ''));
+            return $this->ok('Rejected. The person who asked has been told.', 'billing');
+        }, site_url('billing'));
+    }
+
+    public function cancelRequest(int $id)
+    {
+        return $this->act(function () use ($id) {
+            PlanRequests::cancel($id);
+            return $this->ok('The request is cancelled.', 'billing');
+        }, site_url('billing'));
     }
 }

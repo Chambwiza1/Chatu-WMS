@@ -108,7 +108,7 @@ final class Rights
         'settings' => ['Settings', null, [
             'do' => [
                 'admin.settings' => ['Settings and logo', 'Keep the organisation\'s settings, reason codes and logo'],
-                'billing.manage' => ['Plan and billing', 'Change the plan, switch modules and pay invoices'],
+                'billing.manage' => ['Plan and billing', 'See Billing, pay invoices, switch modules, and ask for a plan and its invoice (the account owner approves)'],
             ],
         ]],
     ];

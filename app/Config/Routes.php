@@ -238,6 +238,9 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->get('billing/invoices/(:num)', 'Billing::invoice/$1');
     $routes->post('billing/invoices/(:num)/pay', 'Billing::pay/$1');
     $routes->post('billing/payments/(:num)/check', 'Billing::check/$1');
+    $routes->post('billing/requests', 'Billing::requestPlan');   // core 1.5.5
+    $routes->post('billing/requests/(:num)/decide', 'Billing::decideRequest/$1');
+    $routes->post('billing/requests/(:num)/cancel', 'Billing::cancelRequest/$1');
     $routes->get('admin/modules', 'Billing::modules');
     $routes->post('admin/modules', 'Billing::saveModule');
 });

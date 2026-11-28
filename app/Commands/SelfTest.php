@@ -124,6 +124,7 @@ class SelfTest extends BaseCommand
         \App\Libraries\Setup\UpgradeOutbox::run($conn);
         \App\Libraries\Setup\UpgradeEscalate::run($conn);
         \App\Libraries\Setup\UpgradeFilters::run($conn);
+        \App\Libraries\Setup\UpgradePlanRequests::run($conn);   // core 1.5.5
         Db::reset($conn);
         \App\Libraries\Core\Tenancy::set(null);
         Settings::flush();

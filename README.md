@@ -4,7 +4,7 @@ By Chatu Innovations. Support: info@chatuzm.com, +260 773818370 / +260 979913497
 
 A standalone warehouse management system for distributors, manufacturers and depots. Every unit of stock is in one place (warehouse, bin, batch, serial number, status), every change is in an append-only ledger, and stock is valued at FIFO cost. Built on the Chatu Assets platform: the same sign-in, duty-based roles, hash-chained audit log, installer and look.
 
-Version 0.9.0 (core 1.9: Excel beside every CSV export, saved filters shared with a role; core 1.8: late work chased, then escalated to managers; core 1.7: one search rule, type-ahead pickers, bulk edit; core 1.6: search everything, "+", activity on each record, the dashboard; core 1.4: messages from your own e-mail and WhatsApp, customers told when goods leave and arrive; core 1.3: light or dark, your own colours, alerts that pop up, a menu that folds with menu search; who works where; signing in as someone, and support access by the organisation's leave; a sign-up form that sends a request; core 1.5.3: an invoice the product raises itself; "Pay by card" opens DPO's card page; forgotten password reset by e-mail; the ChatuERP core, verified: organisations, one login per person, the beta12 access model, the platform console, plans and billing). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
+Version 0.9.1 (core 1.5.5: clients choose their plan and ask for their invoice from Billing; core 1.9: Excel beside every CSV export, saved filters shared with a role; core 1.8: late work chased, then escalated to managers; core 1.7: one search rule, type-ahead pickers, bulk edit; core 1.6: search everything, "+", activity on each record, the dashboard; core 1.4: messages from your own e-mail and WhatsApp, customers told when goods leave and arrive; core 1.3: light or dark, your own colours, alerts that pop up, a menu that folds with menu search; who works where; signing in as someone, and support access by the organisation's leave; a sign-up form that sends a request; core 1.5.3: an invoice the product raises itself; "Pay by card" opens DPO's card page; forgotten password reset by e-mail; the ChatuERP core, verified: organisations, one login per person, the beta12 access model, the platform console, plans and billing). Installation and updating: see [INSTALL.md](INSTALL.md) (cPanel and Linux). How it works inside: [DESIGN.md](DESIGN.md).
 
 ## What it does
 
@@ -64,6 +64,10 @@ Version 0.9.0 (core 1.9: Excel beside every CSV export, saved filters shared wit
 ## Not in this version
 
 Invoicing and payments (by design: export the dispatch report to the accounting system), a link to ChatuPOS shops (kept fully separate for now), and route optimisation. Offline use is look-up only: receiving, moving and dispatching need the network, so that two people cannot sell or move the same unit.
+
+## Changes in 0.9.1
+
+- **Billing:** the account owner chooses a plan and gets the invoice at once; an administrator or accountant asks and the account owner approves. The Accountant role gets "Plan and billing". Notes: `RELEASE_0_9_1.md`.
 
 ## Changes in 0.9.0
 

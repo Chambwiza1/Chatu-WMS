@@ -32,7 +32,7 @@ final class Seed
         'sales_clerk'       => ['Sales and orders clerk', 2, 'Takes customer orders.', ['stock.view', 'sales.manage', 'customer.manage', 'report.view']],
         'production'        => ['Production supervisor', 3, 'Posts production runs and keeps recipes.', ['stock.view', 'production.manage', 'inventory.move', 'report.view']],
         'transport'         => ['Transport officer', 3, 'Keeps vehicles and drivers, plans and closes trips.', ['stock.view', 'fleet.manage', 'report.view']],
-        'accountant'        => ['Accountant', 4, 'Sees costs and values, approves adjustments and counts.', ['stock.view', 'stock.view_cost', 'stock.approve', 'report.view', 'data.export', 'audit.view']],
+        'accountant'        => ['Accountant', 4, 'Sees costs and values, approves adjustments and counts.', ['stock.view', 'stock.view_cost', 'stock.approve', 'report.view', 'data.export', 'audit.view', 'billing.manage']],
         'auditor'           => ['Auditor (read-only)', 1, 'Sees everything, changes nothing.', ['stock.view', 'stock.view_cost', 'report.view', 'data.export', 'audit.view']],
         'system_admin'      => ['System administrator', 1, 'Users, roles, settings and warehouse layout. Cannot move or approve stock.', ['user.signin_as', 'admin.users', 'admin.settings', 'warehouse.setup', 'audit.view']],
         'platform_owner'    => ['Platform owner', 9, 'Runs the online service: organisations, plans, platform settings. Sees no organisation\'s stock.', ['platform.tenants', 'platform.settings', 'platform.audit', 'platform.support']],

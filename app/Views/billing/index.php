@@ -9,9 +9,10 @@
 <tr><th>Plan</th><td><?= $limits['plan'] ? esc($limits['plan']['name']) . ' · ' . esc($limits['plan']['currency']) . ' ' . number_format((float) $limits['plan']['monthly_price'], 2) . ' a month' : 'Not chosen yet' ?></td></tr>
 <?php foreach ($limits['items'] as $it): ?><tr><th><?= esc($it['label']) ?></th><td><?= (int) $it['used'] ?> of <?= $it['max'] ?? 'any number' ?></td></tr><?php endforeach ?>
 <tr><th>Paid until</th><td><?= $t['paid_until'] ? nice_date($t['paid_until']) : '—' ?></td></tr></tbody></table>
-<p class="small">To change your plan, contact Chatu Innovations: info@chatuzm.com · +260 773818370.</p></section>
+<p class="small">Choose or change your plan below. Help: info@chatuzm.com · +260 773818370.</p></section>
 <section class="panel"><h2>Invoices</h2><div class="table-wrap"><table><thead><tr><th>Number</th><th>For</th><th class="num">Amount</th><th>Due</th><th>Status</th></tr></thead><tbody>
 <?php if (! $rows): ?><tr><td colspan="5" class="empty">No invoices yet.</td></tr><?php endif ?>
 <?php foreach ($rows as $r): ?><tr><td class="mono"><a href="<?= site_url('billing/invoices/' . $r['id']) ?>"><?= esc($r['number']) ?></a></td><td><?= nice_date($r['period_start']) ?> to <?= nice_date($r['period_end']) ?></td><td class="num"><?= esc($r['currency']) ?> <?= number_format((float) $r['amount'], 2) ?></td><td><?= nice_date($r['due_on']) ?></td><td><?= badge($r['status'] === 'issued' && $r['due_on'] < date('Y-m-d') ? 'past_due' : $r['status']) ?></td></tr><?php endforeach ?>
-</tbody></table></div></section></div><?php endif ?>
+</tbody></table></div></section></div>
+<?= $this->include('billing/_plans') ?><?php endif ?>
 <?= $this->endSection() ?>
