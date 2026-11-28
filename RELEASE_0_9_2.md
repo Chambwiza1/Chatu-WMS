@@ -13,7 +13,7 @@ The owner's two decisions on core 1.5.5 (clients choose their plan and ask for t
 - When it is paid (online through Lenco or DPO, or recorded by you in the console), the plan changes in the same step.
 - Until then Billing says: "Your plan changes to *plan* when invoice *number* is paid", and the invoice carries the note "The plan changes to *plan* when this is paid."
 - Cancelling the unpaid invoice from the console leaves the plan as it was. Nothing has to be undone.
-- A payment is never refused over a limit. If the organisation grew past the new plan between asking and paying, the plan still changes.' + (' The audit log says it is over.' if kind != 'cc' else '') + '
+- A payment is never refused over a limit. If the organisation grew past the new plan between asking and paying, the plan still changes. The audit log says it is over.
 
 ## 2. Credit for time left, on invoices of 12 months or more
 
