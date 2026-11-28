@@ -3,6 +3,7 @@
 <div class="page-head"><div><h1>Stock</h1><p class="sub"><?= esc(wh_name($wh)) ?></p></div>
 <div class="actions"><a class="btn secondary" href="<?= site_url('stock?status=quarantine') ?>">Quarantine</a><a class="btn secondary" href="<?= site_url('stock?status=damaged') ?>">Damaged</a><a class="btn secondary" href="<?= site_url('stock?status=hold') ?>">On hold</a><a class="btn secondary" href="<?= site_url('reports/by_bin?warehouse_id=' . $wh) ?>">By bin</a></div></div>
 <form method="get" class="filters"><div class="field"><label for="q">Item</label><input id="q" name="q" type="search" value="<?= esc($q) ?>" placeholder="Code or name"></div><button class="btn secondary" type="submit">Filter</button></form>
+<?= view('partials/saved_filters') ?>
 <?php if (! $rows): ?><div class="panel empty">No stock<?= $q !== '' ? ' matching that' : ' in this warehouse yet' ?>.</div><?php else: ?>
 <div class="table-wrap"><table><thead><tr><th>Item</th><th>Description</th><th class="num">Free</th><th class="num">Reserved</th><th class="num">To put away</th><th class="num">Held</th><th class="num">Expired</th><th class="num">Damaged</th><th class="num">On hand</th><th>Unit</th></tr></thead><tbody>
 <?php foreach ($rows as $r): ?><tr>

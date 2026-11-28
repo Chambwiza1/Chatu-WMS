@@ -4,6 +4,7 @@
 <form method="get" class="filters"><div class="field"><label for="q">Find</label><input id="q" name="q" type="search" value="<?= esc($q) ?>" placeholder="Code, name or barcode"></div>
 <div class="field"><label for="kind">Kind</label><select id="kind" name="kind" data-autosubmit><option value="">All</option><?php foreach (\App\Libraries\Master\Items::KINDS as $k => $l): ?><option value="<?= $k ?>" <?= $kind === $k ? 'selected' : '' ?>><?= esc($l) ?></option><?php endforeach ?></select></div>
 <button class="btn secondary" type="submit">Filter</button></form>
+<?= view('partials/saved_filters') ?>
 <?php if (! $rows): ?><div class="panel empty">No items<?= $q !== '' ? ' match that' : ' yet' ?>.</div><?php else: ?>
 <form method="get" action="<?= site_url('labels/items') ?>" id="label-form"><div class="filters"><span class="muted small">Tick items, then</span><label for="lcopies" class="small">copies</label><input id="lcopies" class="n" type="number" name="copies" value="1" min="1" max="500"><label class="check"><input type="checkbox" name="price" value="1"> with price</label><label class="check"><input type="checkbox" name="packs" value="1"> pack barcodes</label><button class="btn secondary small" type="submit">Print labels</button></div>
 <div class="table-wrap"><table><thead><tr><th><span class="sr">Tick</span></th><th>Code</th><th>Name</th><th>Kind</th><th>Tracking</th><th>Unit</th><th class="num">Reorder at</th><th class="num">In stock</th><th></th></tr></thead><tbody>

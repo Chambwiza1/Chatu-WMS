@@ -203,7 +203,10 @@ abstract class BaseController extends Controller
             Audit::denied('report.export', 'Missing permission data.export', 'report', $name);
             return $this->forbidden('Your role cannot export data.');
         }
-        Audit::log('report.export', 'report', $name, null, ['rows' => count($rows)]);
+        if ($this->request->getGet('as') === 'xlsx') {
+            return $this->xlsx($name, $header, $rows);
+        }
+        Audit::log('report.export', 'report', $name, null, ['rows' => count($rows), 'format' => 'csv']);
         $fh = fopen('php://temp', 'w+');
         fwrite($fh, "\xEF\xBB\xBF");
         fputcsv($fh, $header);
@@ -217,6 +220,20 @@ abstract class BaseController extends Controller
         $body = stream_get_contents($fh);
         return $this->response->setHeader('Content-Type', 'text/csv; charset=utf-8')
             ->setHeader('Content-Disposition', 'attachment; filename="' . preg_replace('/[^a-z0-9_-]/i', '_', $name) . '-' . date('Ymd') . '.csv"')
+            ->setBody($body);
+    }
+
+    /** The same export as an Excel workbook (core 1.9, D6). Same permission, same audit. */
+    protected function xlsx(string $name, array $header, array $rows): ResponseInterface
+    {
+        if (! Access::can('data.export')) {
+            Audit::denied('report.export', 'Missing permission data.export', 'report', $name);
+            return $this->forbidden('Your role cannot export data.');
+        }
+        Audit::log('report.export', 'report', $name, null, ['rows' => count($rows), 'format' => 'xlsx']);
+        $body = \App\Libraries\Core\Xlsx::build($name, $header, $rows);
+        return $this->response->setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            ->setHeader('Content-Disposition', 'attachment; filename="' . preg_replace('/[^a-z0-9_-]/i', '_', $name) . '-' . date('Ymd') . '.xlsx"')
             ->setBody($body);
     }
 }

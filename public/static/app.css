@@ -744,3 +744,17 @@ details.bulk > summary::-webkit-details-marker { display: none; }
 details.bulk > summary h2 { display: inline; font-size: 1.05rem; margin: 0; }
 details.bulk > summary::before { content: "\25B8"; margin-right: 8px; color: var(--ink-2); }
 details.bulk[open] > summary::before { content: "\25BE"; }
+
+/* core 1.9 (D6): saved filters */
+.saved-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: -6px 0 14px; }
+.saved-filters:not(:has(*)) { display: none; }
+.sf-chip { display: inline-flex; align-items: center; border: 1px solid var(--rule); border-radius: 999px; background: var(--panel); font-size: .875rem; }
+.sf-chip a { padding: 3px 4px 3px 11px; text-decoration: none; color: inherit; }
+.sf-chip:not(:has(form)) a { padding-right: 11px; }
+.sf-chip.on { border-color: var(--patina); background: var(--patina-wash); }
+.sf-chip form { margin: 0; }
+.sf-x { border: 0; background: none; cursor: pointer; padding: 3px 9px 3px 4px; color: var(--ink-2); font-size: 1rem; line-height: 1; }
+.sf-x:hover { color: var(--bad); }
+.sf-save summary { cursor: pointer; color: var(--patina-ink); }
+.sf-save[open] { flex-basis: 100%; }
+.sf-save .filters { margin: 8px 0 0; }

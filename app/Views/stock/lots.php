@@ -2,6 +2,7 @@
 <?= $this->section('content') ?>
 <div class="page-head"><div><h1>Batches and serial numbers</h1></div></div>
 <form method="get" class="filters"><div class="field"><label for="q">Batch, serial or item</label><input id="q" name="q" type="search" value="<?= esc($q) ?>"></div><button class="btn secondary" type="submit">Find</button></form>
+<?= view('partials/saved_filters') ?>
 <?php if ($serials): ?><h2>Serial numbers</h2><div class="table-wrap"><table><thead><tr><th>Serial</th><th>Item</th><th>Status</th><th>Warehouse</th></tr></thead><tbody>
 <?php foreach ($serials as $s): ?><tr><td class="mono"><a href="<?= site_url('serials/' . $s['id']) ?>"><?= esc($s['serial_no']) ?></a></td><td><?= esc($s['sku']) ?></td><td><?= badge($s['status']) ?></td><td><?= esc($s['wh']) ?></td></tr><?php endforeach ?></tbody></table></div><h2>Batches</h2><?php endif ?>
 <div class="table-wrap"><table><thead><tr><th>Batch</th><th>Item</th><th>Made / received</th><th>Expiry</th><th>Status</th><th class="num">In stock</th></tr></thead><tbody>

@@ -226,6 +226,8 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/messages/customers', 'Messaging::notify');
     $routes->post('admin/messages/(:num)/retry', 'Messaging::retry/$1');
     $routes->post('admin/messages/(:num)/cancel', 'Messaging::cancel/$1');
+    $routes->post('filters', 'SavedFilters::save');                     // core 1.9 (D6): saved filters
+    $routes->post('filters/(:num)/delete', 'SavedFilters::delete/$1');
     $routes->get('brand/logo', 'Admin::logoFile');
     $routes->get('admin/reconcile', 'Admin::reconcile');
     $routes->post('admin/reconcile', 'Admin::runReconcile');

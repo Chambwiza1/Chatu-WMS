@@ -123,6 +123,7 @@ class SelfTest extends BaseCommand
         \App\Libraries\Setup\Upgrade::v040($conn);
         \App\Libraries\Setup\UpgradeOutbox::run($conn);
         \App\Libraries\Setup\UpgradeEscalate::run($conn);
+        \App\Libraries\Setup\UpgradeFilters::run($conn);
         Db::reset($conn);
         \App\Libraries\Core\Tenancy::set(null);
         Settings::flush();

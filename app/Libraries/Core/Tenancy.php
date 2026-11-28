@@ -16,13 +16,13 @@ final class Tenancy
         'stock', 'stock_locks', 'movements', 'cost_layers', 'cost_entries', 'allocations', 'purchase_orders', 'po_lines', 'receipts', 'receipt_lines',
         'supplier_returns', 'moves', 'transfers', 'transfer_lines', 'transit', 'transit_costs', 'transfer_receipts', 'sales_orders', 'so_lines',
         'shipments', 'shipment_lines', 'shipment_units', 'customer_returns', 'recipes', 'recipe_lines', 'production_runs', 'production_inputs',
-        'adjustments', 'adjustment_lines', 'counts', 'count_lines', 'vehicles', 'drivers', 'vehicle_logs', 'trips', 'trip_stops', 'item_units', 'pick_waves', 'signin_as_log', 'signin_as_actions', 'message_outbox', 'escalations'];
+        'adjustments', 'adjustment_lines', 'counts', 'count_lines', 'vehicles', 'drivers', 'vehicle_logs', 'trips', 'trip_stops', 'item_units', 'pick_waves', 'signin_as_log', 'signin_as_actions', 'message_outbox', 'escalations', 'saved_filters'];
 
     /** The warehouse business tables (TABLES without the membership, message and audit tables). */
     public static function business(): array
     {
         // core 1.2: the record of sign-ins was born with its organisation column, so the 0.3 converter leaves it alone
-        return array_values(array_diff(array_slice(self::TABLES, 7), ['signin_as_log', 'signin_as_actions', 'message_outbox', 'escalations']));
+        return array_values(array_diff(array_slice(self::TABLES, 7), ['signin_as_log', 'signin_as_actions', 'message_outbox', 'escalations', 'saved_filters']));
     }
 
     private static ?int $id = null;

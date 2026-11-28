@@ -42,7 +42,6 @@ class Reports extends BaseController
         return $this->render('reports/show', ['code' => $code, 'meta' => R::LIST[$code], 'res' => $res, 'f' => $f, 'warehouses' => Warehouses::forUser('stock.view')], R::LIST[$code][0]);
     }
 
-    /** Recall look-up: a batch number or a serial number. */
     /** core 1.8 (E4): what is late, at the person's warehouses, with who has been told. */
     public function overdue()
     {
@@ -74,6 +73,7 @@ class Reports extends BaseController
         return $this->render('reports/overview', $d + ['warehouses' => $whs, 'whSel' => $sel, 'whName' => $name], 'Dashboard');
     }
 
+    /** Recall look-up: a batch number or a serial number. */
     public function trace()
     {
         if ($r = $this->need('stock.view')) {
