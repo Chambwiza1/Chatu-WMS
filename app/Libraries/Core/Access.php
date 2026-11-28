@@ -96,6 +96,17 @@ final class Access
         return isset(self::permissions($userId)[$perm]);
     }
 
+    /** Any one of these permissions. */
+    public static function canAny(array $perms, ?int $userId = null): bool
+    {
+        foreach ($perms as $p) {
+            if (self::can($p, $userId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public static function require(string $perm): void
     {
         if (! Auth::id()) {

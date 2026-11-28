@@ -58,6 +58,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
 
     $routes->get('/', 'Home::index');
     $routes->get('find', 'Home::find');
+    $routes->get('search', 'Home::search');                              // core 1.6 (C7): search everything
     $routes->get('offline/snapshot', 'Offline::snapshot');
 
     // stock
@@ -177,6 +178,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
 
     // reports
     $routes->get('reports', 'Reports::index');
+    $routes->get('dashboard', 'Reports::overview');                    // core 1.6 (C12): the dashboard
     $routes->get('reports/trace', 'Reports::trace');
     $routes->get('reports/(:segment)', 'Reports::show/$1');
 
@@ -221,7 +223,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     $routes->post('admin/messages/test', 'Messaging::test');
     $routes->post('admin/messages/customers', 'Messaging::notify');
     $routes->post('admin/messages/(:num)/retry', 'Messaging::retry/$1');
-    $routes->post('admin/messages/(:num)/cancel', 'Messaging::cancel/$1');                        // core 1.3 (C2): the organisation's colours
+    $routes->post('admin/messages/(:num)/cancel', 'Messaging::cancel/$1');
     $routes->get('brand/logo', 'Admin::logoFile');
     $routes->get('admin/reconcile', 'Admin::reconcile');
     $routes->post('admin/reconcile', 'Admin::runReconcile');

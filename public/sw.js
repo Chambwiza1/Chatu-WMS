@@ -3,7 +3,7 @@
  * Signed-in pages and data are never cached here: when a page cannot load, the offline look-up opens instead,
  * which answers from the snapshot this browser saved while online.
  */
-const CACHE = 'chatuwms-0.5.0';
+const CACHE = 'chatuwms-0.6.0';
 const SHELL = ['offline.html', 'static/app.css', 'static/app.js', 'static/theme.js', 'static/offline.js', 'static/fonts/figtree.woff2',
   'static/fonts/bricolage-700.woff2', 'static/fonts/bricolage-800.woff2', 'static/brand/logo-wide.png', 'static/brand/favicon-64.png', 'static/icon-192.png'];
 

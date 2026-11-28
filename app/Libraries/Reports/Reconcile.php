@@ -103,7 +103,7 @@ final class Reconcile
     {
         $out = [];
         foreach (Db::rows("SELECT se.id, se.serial_no, se.status, se.warehouse_id, s.warehouse_id st_wh FROM {serials} se LEFT JOIN {stock} s ON s.serial_id = se.id AND s.qty > 0
-                            WHERE se.tenant_id = {tid} AND (se.status = 'in_stock') <> (s.id IS NOT NULL) OR (se.status = 'in_stock' AND se.warehouse_id <> s.warehouse_id)") as $r) {
+                            WHERE se.tenant_id = {tid} AND ((se.status = 'in_stock') <> (s.id IS NOT NULL) OR (se.status = 'in_stock' AND se.warehouse_id <> s.warehouse_id))") as $r) {
             $out[] = "Serial {$r['serial_no']} is '{$r['status']}' but " . ($r['st_wh'] ? 'is in stock in warehouse ' . $r['st_wh'] : 'is in no stock row') . '.';
         }
         foreach (Db::rows("SELECT se.serial_no, se.status FROM {serials} se LEFT JOIN {transit} t ON t.serial_id = se.id AND t.qty_open > 0

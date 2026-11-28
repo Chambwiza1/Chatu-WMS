@@ -23,4 +23,5 @@
 <td class="mono"><?= esc($m['from_bin']) ?><?= $m['from_status'] && $m['from_status'] !== 'available' ? ' (' . esc($m['from_status']) . ')' : '' ?></td><td class="mono"><?= esc($m['to_bin']) ?><?= $m['to_status'] && $m['to_status'] !== 'available' ? ' (' . esc($m['to_status']) . ')' : '' ?></td>
 <td><?= esc(trim(($m['lot_no'] ?? '') . ' ' . ($m['serial_no'] ?? ''))) ?></td><td class="num"><?= $m['to_bin'] && ! $m['from_bin'] ? '+' : ($m['from_bin'] && ! $m['to_bin'] ? '−' : '') ?><?= qty($m['qty'], $d) ?></td><td><?= esc($m['user']) ?></td></tr><?php endforeach ?>
 </tbody></table></div>
+<?= view('partials/activity', ['type' => 'item', 'id' => $item['id']]) ?>
 <?= $this->endSection() ?>

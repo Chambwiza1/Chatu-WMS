@@ -18,4 +18,5 @@
 <?php if (in_array($po['status'], ['draft', 'open', 'partly_received'], true) && can('purchase.manage', $wh)): ?>
 <details class="no-print"><summary><?= $po['status'] === 'partly_received' ? 'Close the order (the rest will not come)' : 'Cancel the order' ?></summary>
 <form method="post" action="<?= site_url('purchase-orders/' . $po['id'] . '/close') ?>" class="inline-form"><?= csrf_field() ?><input name="why" placeholder="Why" required><button class="btn danger small" type="submit">Confirm</button></form></details><?php endif ?>
+<?= view('partials/activity', ['type' => 'purchase_order', 'id' => $po['id']]) ?>
 <?= $this->endSection() ?>

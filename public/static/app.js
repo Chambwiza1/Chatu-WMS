@@ -512,3 +512,61 @@
     });
   }
 })();
+
+/* Chatu Warehouse 0.6.0 (core 1.6, C7, C8; Chatu Construction's top bar): search with suggestions as you type; arrows and
+   Enter to choose; "/" to jump to the box; Enter with nothing chosen opens an exact code's page, else the results. */
+(function () {
+  'use strict';
+  document.querySelectorAll('form[data-search]').forEach((form) => {
+    const input = form.querySelector('input[type=search]');
+    const list = form.querySelector('.suggest');
+    let timer = null; let seq = 0; let pos = -1;
+    const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); pos = -1; };
+    const links = () => [...list.querySelectorAll('a')];
+    const mark = () => links().forEach((a, i) => a.classList.toggle('on', i === pos));
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { close(); return; }
+      timer = setTimeout(async () => {
+        const my = ++seq;
+        try {
+          const r = await fetch(document.body.dataset.base + '/search?format=json&q=' + encodeURIComponent(q), { headers: { Accept: 'application/json' } });
+          if (!r.ok || my !== seq) return;
+          const d = await r.json();
+          list.innerHTML = '';
+          if (!d.groups.length) {
+            const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'Nothing found'; list.appendChild(p);
+          }
+          d.groups.forEach((g) => {
+            const h = document.createElement('div'); h.className = 'g'; h.textContent = g.group; list.appendChild(h);
+            g.rows.forEach((row) => {
+              const a = document.createElement('a'); a.href = row.href; a.setAttribute('role', 'option');
+              const t = document.createElement('span'); t.textContent = row.title; a.appendChild(t);
+              if (row.sub) { const s = document.createElement('small'); s.textContent = row.sub; a.appendChild(s); }
+              list.appendChild(a);
+            });
+          });
+          const all = document.createElement('a'); all.href = document.body.dataset.base + '/search?q=' + encodeURIComponent(q); all.className = 'all'; all.textContent = 'All results for “' + q + '”';
+          list.appendChild(all);
+          list.hidden = false; input.setAttribute('aria-expanded', 'true'); pos = -1;
+        } catch (e) { /* offline: Enter still opens the results page */ }
+      }, 180);
+    });
+    input.addEventListener('keydown', (e) => {
+      const ls = links();
+      if (list.hidden || !ls.length) return;
+      if (e.key === 'ArrowDown') { pos = Math.min(ls.length - 1, pos + 1); mark(); e.preventDefault(); }
+      if (e.key === 'ArrowUp') { pos = Math.max(-1, pos - 1); mark(); e.preventDefault(); }
+      if (e.key === 'Enter' && pos >= 0) { e.preventDefault(); ls[pos].click(); }
+      if (e.key === 'Escape') close();
+    });
+    document.addEventListener('click', (e) => { if (!form.contains(e.target)) close(); });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === '/' && !['INPUT', 'TEXTAREA', 'SELECT'].includes((document.activeElement || {}).tagName)) { e.preventDefault(); input.focus(); }
+    });
+  });
+  document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.quickadd[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  });
+})();

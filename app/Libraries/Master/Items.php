@@ -48,7 +48,7 @@ final class Items
         if ($code === '') {
             return [null, null];
         }
-        $r = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND sku = ? OR (barcode = ? AND barcode <> \'\')', [strtoupper($code), $code]);
+        $r = Db::row('SELECT * FROM {items} WHERE tenant_id = {tid} AND (sku = ? OR (barcode = ? AND barcode <> \'\'))', [strtoupper($code), $code]);
         if ($r) {
             return [$r, null];
         }
@@ -151,7 +151,7 @@ final class Items
             }
             $seen[$name] = true;
             $bc = trim((string) ($u['barcode'] ?? ''));
-            if ($bc !== '' && (Db::value("SELECT 1 FROM {items} WHERE tenant_id = {tid} AND barcode = ? OR sku = ?", [$bc, strtoupper($bc)]) || Db::value('SELECT 1 FROM {item_units} WHERE tenant_id = {tid} AND barcode = ? AND item_id <> ?', [$bc, $id]))) {
+            if ($bc !== '' && (Db::value("SELECT 1 FROM {items} WHERE tenant_id = {tid} AND (barcode = ? OR sku = ?)", [$bc, strtoupper($bc)]) || Db::value('SELECT 1 FROM {item_units} WHERE tenant_id = {tid} AND barcode = ? AND item_id <> ?', [$bc, $id]))) {
                 throw new BizException('Barcode ' . $bc . ' is already used by another item or pack.');
             }
             $rows[] = ['item_id' => $id, 'name' => $name, 'factor' => $f, 'barcode' => $bc ?: null, 'buy_default' => ! empty($u['buy_default']) ? 1 : 0, 'sell_default' => ! empty($u['sell_default']) ? 1 : 0];

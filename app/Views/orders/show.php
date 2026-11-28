@@ -18,4 +18,5 @@
 <?php foreach ($shipments as $s): ?><tr><td><a href="<?= site_url('shipments/' . $s['id']) ?>"><?= esc($s['number']) ?></a></td><td><?= badge($s['status']) ?></td><td><?= local_time($s['dispatched_at']) ?></td><td><?= local_time($s['delivered_at']) ?></td><td><?= esc($s['pod_name']) ?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
 <?php if (! in_array($so['status'], ['delivered', 'closed', 'cancelled'], true) && can('sales.manage', $wh)): ?><details><summary>Cancel the order<?= $so['status'] === 'draft' || $so['status'] === 'confirmed' ? '' : ' (what has not been shipped)' ?></summary>
 <form method="post" action="<?= site_url('orders/' . $so['id'] . '/cancel') ?>" class="inline-form"><?= csrf_field() ?><input name="why" placeholder="Why" required><button class="btn danger small" type="submit">Cancel order</button></form></details><?php endif ?>
+<?= view('partials/activity', ['type' => 'sales_order', 'id' => $so['id']]) ?>
 <?= $this->endSection() ?>

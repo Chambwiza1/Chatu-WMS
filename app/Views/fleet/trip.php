@@ -26,4 +26,5 @@
 <div><button class="btn" type="submit">Close trip</button></div></form>
 <?php endif ?>
 <p class="print-only">Driver: ______________________ &nbsp; Gate: ______________________ &nbsp; Km out: ________ &nbsp; Km in: ________</p>
+<?= view('partials/activity', ['type' => 'trip', 'id' => $t['id']]) ?>
 <?= $this->endSection() ?>

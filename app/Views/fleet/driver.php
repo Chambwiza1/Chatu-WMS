@@ -11,4 +11,5 @@
 <div class="field"><label for="notes">Notes</label><textarea id="notes" name="notes"><?= esc($val('notes')) ?></textarea></div></fieldset>
 <?php if ($edit): ?><div><button class="btn" type="submit">Save driver</button></div><?php endif ?></form>
 <?php if ($trips): ?><h2>Trips</h2><ul><?php foreach ($trips as $t): ?><li><a href="<?= site_url('fleet/trips/' . $t['id']) ?>"><?= esc($t['number']) ?></a> <?= nice_date($t['planned_date']) ?> in <?= esc($t['reg_no']) ?> <?= badge($t['status']) ?></li><?php endforeach ?></ul><?php endif ?>
+<?= view('partials/activity', ['type' => 'driver', 'id' => $d['id'] ?? null]) ?>
 <?= $this->endSection() ?>

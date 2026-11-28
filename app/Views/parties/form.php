@@ -14,4 +14,5 @@
 <div class="field"><label for="notes">Notes</label><textarea id="notes" name="notes"><?= esc($v('notes')) ?></textarea></div>
 <?php if ($row): ?><label class="check"><input type="checkbox" name="active" value="1" <?= $row['active'] ? 'checked' : '' ?>> Active</label><?php endif ?>
 <div><button class="btn" type="submit">Save</button> <a class="btn secondary" href="<?= site_url($t) ?>">Cancel</a></div></form>
+<?= view('partials/activity', ['type' => rtrim($t, 's'), 'id' => $row['id'] ?? null]) ?>
 <?= $this->endSection() ?>

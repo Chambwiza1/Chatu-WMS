@@ -29,6 +29,7 @@ if ($me) {
             ['/production', 'Production', can('production.manage') && \App\Libraries\Platform\Modules::on('production')],
         ],
         'Know' => [
+            ['/dashboard', 'Dashboard', can('stock.view')],
             ['/reports', 'Reports', can('report.view') || can('stock.view')],
         ],
         'Lists' => [
@@ -123,6 +124,15 @@ $active = static fn (string $href): bool => $href === $best;
         </select>
       </form>
     <?php endif ?>
+    <?php if ($org ?? null): // core 1.6 (C7, C8): search everything; "+" adds what you may add ?>
+    <form method="get" action="<?= site_url('search') ?>" class="topsearch" role="search" data-search>
+      <label class="sr" for="topq">Search</label>
+      <input id="topq" name="q" type="search" placeholder="Search… ( / )" autocomplete="off" aria-autocomplete="list" aria-controls="topq-list" aria-expanded="false" value="<?= esc((string) service('request')->getGet('q'), 'attr') ?>">
+      <input type="hidden" name="go" value="1"><div id="topq-list" class="suggest" role="listbox" hidden></div>
+    </form>
+    <?php $adds = \App\Libraries\Core\Search::quickAdd(); if ($adds): ?>
+    <details class="quickadd"><summary aria-label="Add something new" title="Add">+</summary><div class="menu" role="menu"><?php foreach ($adds as $a): ?><a role="menuitem" href="<?= site_url($a[0]) ?>"><?= esc($a[1]) ?></a><?php endforeach ?></div></details>
+    <?php endif; endif ?>
     <nav class="topnav" aria-label="Account">
       <a href="<?= site_url('notifications') ?>" class="bell<?= ($unread ??= 0) ? ' has-unread' : '' ?>">Messages<?= $unread ? ' <span class="count">' . $unread . '</span>' : '' ?></a>
       <button type="button" class="theme-btn" data-theme-toggle aria-label="Light or dark"><span class="ti" aria-hidden="true"></span><span class="tl">Auto</span></button>

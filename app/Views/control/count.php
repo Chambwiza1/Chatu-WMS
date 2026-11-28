@@ -22,4 +22,5 @@
 <form method="post" action="<?= site_url('counts/' . $c['id'] . '/reopen') ?>" class="panel stack"><?= csrf_field() ?><h2>Recount</h2><div class="field"><label for="why">What to look at again</label><input id="why" name="why" required></div><div><button class="btn secondary" type="submit">Send back</button></div></form></div><?php endif ?>
 <?php if (in_array($c['status'], ['open', 'submitted'], true) && can('count.manage', $wh)): ?><details><summary>Cancel the count</summary><form method="post" action="<?= site_url('counts/' . $c['id'] . '/cancel') ?>" class="inline-form"><?= csrf_field() ?><input name="why" placeholder="Why" required><button class="btn danger small" type="submit">Cancel count</button></form></details><?php endif ?>
 <p class="muted small">Started <?= local_time($c['created_at']) ?> by <?= esc($c['created_name']) ?><?= $c['submitted_name'] ? ' · submitted by ' . esc($c['submitted_name']) : '' ?><?= $c['posted_name'] ? ' · posted by ' . esc($c['posted_name']) . ' ' . local_time($c['posted_at']) : '' ?></p>
+<?= view('partials/activity', ['type' => 'count', 'id' => $c['id']]) ?>
 <?= $this->endSection() ?>

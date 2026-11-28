@@ -22,4 +22,5 @@
 <div class="table-wrap gap-top"><table><thead><tr><th>Shipment</th><th>Order</th><th>Customer</th><th>Town</th><th>Status</th></tr></thead><tbody>
 <?php foreach ($shipments as $s): ?><tr><td><a href="<?= site_url('shipments/' . $s['id']) ?>"><?= esc($s['number']) ?></a></td><td><?= esc($s['order_no']) ?></td><td><?= esc($s['customer']) ?></td><td><?= esc($s['town']) ?></td><td><?= badge($s['status']) ?></td></tr><?php endforeach ?>
 </tbody></table></div></section>
+<?= view('partials/activity', ['type' => 'wave', 'id' => $w['id']]) ?>
 <?= $this->endSection() ?>

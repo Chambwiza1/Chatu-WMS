@@ -64,4 +64,5 @@
 <div class="table-wrap"><table><thead><tr><th>When</th><th>How</th><th>To</th><th>Status</th></tr></thead><tbody>
 <?php foreach ($msgs as $m): ?><tr><td><?= local_time($m['created_at']) ?></td><td><?= $m['channel'] === 'whatsapp' ? 'WhatsApp' : 'E-mail' ?></td><td><?= esc($m['recipient']) ?></td><td><?= esc(\App\Libraries\Messaging\Outbox::LABELS[$m['status']] ?? $m['status']) ?><?= $m['error'] && $m['status'] !== 'sent' ? ' <span class="small muted">' . esc($m['error']) . '</span>' : '' ?></td></tr><?php endforeach ?>
 </tbody></table></div><?php endif ?>
+<?= view('partials/activity', ['type' => 'shipment', 'id' => $s['id']]) ?>
 <?= $this->endSection() ?>

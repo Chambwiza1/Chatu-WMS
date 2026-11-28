@@ -11,4 +11,5 @@
 <?php if (! $mine && can('stock.approve', $wh)): ?><form method="post" action="<?= site_url('adjustments/' . $a['id'] . '/approve') ?>" class="panel stack"><?= csrf_field() ?><h2>Approve</h2><div class="field"><label for="anote">Note</label><input id="anote" name="note"></div><div><button class="btn" type="submit">Approve and post</button></div></form><?php endif ?>
 <?php if ($mine || can('stock.approve', $wh)): ?><form method="post" action="<?= site_url('adjustments/' . $a['id'] . '/reject') ?>" class="panel stack"><?= csrf_field() ?><h2><?= $mine ? 'Withdraw' : 'Reject' ?></h2><div class="field"><label for="rnote">Why</label><input id="rnote" name="note" required></div><div><button class="btn danger" type="submit"><?= $mine ? 'Withdraw' : 'Reject' ?></button></div></form><?php endif ?>
 </div><?php if ($mine): ?><p class="muted">You raised this adjustment, so someone else must approve it.</p><?php endif ?><?php endif ?>
+<?= view('partials/activity', ['type' => 'adjustment', 'id' => $a['id']]) ?>
 <?= $this->endSection() ?>

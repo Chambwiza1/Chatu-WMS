@@ -34,6 +34,21 @@ class Home extends BaseController
         return redirect()->to(preg_replace('/([?&])warehouse_id=\d+&?/', '$1', $back));
     }
 
+    /** core 1.6 (C7): search everything, as a page or (format=json) as the top bar's suggestions. */
+    public function search()
+    {
+        $q   = trim((string) $this->request->getGet('q'));
+        $res = \App\Libraries\Core\Search::run($q, $this->request->getGet('format') === 'json' ? 5 : 25);
+        if ($this->request->getGet('format') === 'json') {
+            return $this->response->setJSON(['groups' => array_map(static fn ($g) => ['group' => $g['group'], 'rows' => array_map(static fn ($r) => ['title' => $r['title'], 'sub' => $r['sub'], 'href' => site_url($r['url'])], $g['rows'])], $res)]);
+        }
+        // an exact code (an item, a bin, a batch, a serial, a document) opens straight away, as Find on Home does
+        if ($q !== '' && $this->request->getGet('go') === '1' && ($to = $this->exact($q))) {
+            return redirect()->to($to);
+        }
+        return $this->render('search/index', ['q' => $q, 'groups' => $res], 'Search');
+    }
+
     /** One search box: item code or barcode, batch number, serial number or a document number. */
     public function find()
     {
@@ -41,32 +56,39 @@ class Home extends BaseController
         if ($q === '') {
             return redirect()->to(site_url('/'));
         }
+        $to = $this->exact($q);
+        return redirect()->to($to ?? site_url('items?q=' . rawurlencode($q)));
+    }
+
+    /** The page of the one thing an exact code names (scanned or typed), or null. */
+    private function exact(string $q): ?string
+    {
         [$item] = \App\Libraries\Master\Items::byCode($q);
         if ($item) {
-            return redirect()->to(site_url('stock/item/' . $item['id']));
+            return site_url('stock/item/' . $item['id']);
         }
         $ids = \App\Libraries\Core\Access::warehouses('stock.view');
         if ($ids) {
             $cur = (int) session('wh');
             $bin = Db::row('SELECT id FROM {bins} WHERE tenant_id = {tid} AND code = ? AND warehouse_id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY warehouse_id = ? DESC, id LIMIT 1', [strtoupper($q), $cur]);
             if ($bin) {
-                return redirect()->to(site_url('bins/' . $bin['id']));
+                return site_url('bins/' . $bin['id']);
             }
         }
         if ($l = Db::row('SELECT id FROM {lots} WHERE tenant_id = {tid} AND lot_no = ? ORDER BY id DESC LIMIT 1', [strtoupper($q)])) {
-            return redirect()->to(site_url('lots/' . $l['id']));
+            return site_url('lots/' . $l['id']);
         }
         if ($s = Db::row('SELECT id FROM {serials} WHERE tenant_id = {tid} AND serial_no = ? ORDER BY id DESC LIMIT 1', [$q])) {
-            return redirect()->to(site_url('serials/' . $s['id']));
+            return site_url('serials/' . $s['id']);
         }
         $docs = ['purchase_orders' => 'purchase-orders', 'receipts' => 'receipts', 'transfers' => 'transfers', 'sales_orders' => 'orders', 'shipments' => 'shipments',
             'production_runs' => 'production/runs', 'adjustments' => 'adjustments', 'counts' => 'counts', 'trips' => 'fleet/trips', 'pick_waves' => 'waves'];
         foreach ($docs as $t => $url) {
             if ($d = Db::row("SELECT id FROM {{$t}} WHERE tenant_id = {tid} AND number = ?", [strtoupper($q)])) {
-                return redirect()->to(site_url($url . '/' . $d['id']));
+                return site_url($url . '/' . $d['id']);
             }
         }
-        return redirect()->to(site_url('items?q=' . rawurlencode($q)));
+        return null;
     }
 
     public function notifications()

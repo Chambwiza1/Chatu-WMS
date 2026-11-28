@@ -13,4 +13,5 @@
 <?php if (can('stock.view_cost')): ?><td class="num"><?= money($l['unit_cost'], false) ?><?= $l['unit_cost_fc'] !== null && $r['currency'] !== '' ? '<br><span class="muted small">' . esc($r['currency']) . ' ' . number_format((float) $l['unit_cost_fc'], 2) . '</span>' : '' ?></td><td class="num"><?= money(((float) $l['qty_accepted'] + (float) $l['qty_quarantine']) * (float) $l['unit_cost'], false) ?></td><?php endif ?></tr><?php endforeach ?>
 </tbody><?php if (can('stock.view_cost')): ?><tfoot><tr><td colspan="9">Total</td><td class="num"><?= money($r['value']) ?></td></tr></tfoot><?php endif ?></table></div>
 <p class="print-only">Received by: ______________________ &nbsp; Checked by: ______________________ &nbsp; Driver: ______________________</p>
+<?= view('partials/activity', ['type' => 'receipt', 'id' => $r['id']]) ?>
 <?= $this->endSection() ?>

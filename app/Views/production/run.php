@@ -16,4 +16,5 @@
 <?php if ($run['status'] === 'posted' && can('production.manage', (int) $run['warehouse_id'])): ?>
 <details class="no-print"><summary>Void this run</summary><p class="muted small">Possible only while everything it made is still free in this warehouse. The output leaves at its own cost; the materials go back to their bins and batches at the cost they were used at.</p>
 <form method="post" action="<?= site_url('production/runs/' . $run['id'] . '/void') ?>" class="inline-form"><?= csrf_field() ?><?= token_field() ?><input name="reason" placeholder="Why" required><button class="btn danger small" type="submit">Void run</button></form></details><?php endif ?>
+<?= view('partials/activity', ['type' => 'production_run', 'id' => $run['id']]) ?>
 <?= $this->endSection() ?>

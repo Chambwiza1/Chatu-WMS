@@ -43,6 +43,27 @@ class Reports extends BaseController
     }
 
     /** Recall look-up: a batch number or a serial number. */
+    /** core 1.6 (C12): the dashboard, for the person's own warehouses. */
+    public function overview()
+    {
+        if ($r = $this->need('stock.view')) {
+            return $r;
+        }
+        $days = (int) ($this->request->getGet('days') ?? 30);
+        $wh   = (int) ($this->request->getGet('warehouse') ?? 0);
+        $d    = \App\Libraries\Reports\Overview::build($days, $wh);
+        $mine = \App\Libraries\Core\Access::warehouses('stock.view');
+        $whs  = $mine ? Db::rows('SELECT id, code, name FROM {warehouses} WHERE tenant_id = {tid} AND id IN (' . implode(',', $mine) . ') ORDER BY code') : [];
+        $sel  = in_array($wh, $mine, true) ? $wh : 0;
+        $name = '';
+        foreach ($whs as $x) {
+            if ((int) $x['id'] === $sel) {
+                $name = $x['code'] . ' ' . $x['name'];
+            }
+        }
+        return $this->render('reports/overview', $d + ['warehouses' => $whs, 'whSel' => $sel, 'whName' => $name], 'Dashboard');
+    }
+
     public function trace()
     {
         if ($r = $this->need('stock.view')) {
@@ -50,7 +71,7 @@ class Reports extends BaseController
         }
         $q = trim((string) $this->request->getGet('q'));
         if ($q !== '') {
-            $lots = Db::rows('SELECT l.id, l.lot_no, i.sku, i.name FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND l.lot_no = ? OR l.supplier_lot = ?', [strtoupper($q), $q]);
+            $lots = Db::rows('SELECT l.id, l.lot_no, i.sku, i.name FROM {lots} l JOIN {items} i ON i.id = l.item_id WHERE l.tenant_id = {tid} AND (l.lot_no = ? OR l.supplier_lot = ?)', [strtoupper($q), $q]);
             if (count($lots) === 1) {
                 return redirect()->to(site_url('lots/' . $lots[0]['id']));
             }

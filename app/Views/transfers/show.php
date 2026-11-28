@@ -44,4 +44,5 @@
 <?php else: ?><div class="table-wrap"><table><thead><tr><th>Item</th><th>Batch</th><th>Serial</th><th class="num">On the way</th></tr></thead><tbody><?php foreach ($transit as $x): if ((float) $x['qty_open'] <= 0) continue ?><tr><td><?= esc($x['sku']) ?></td><td><?= esc($x['lot_no']) ?></td><td class="mono"><?= esc($x['serial_no']) ?></td><td class="num"><?= qty($x['qty_open']) ?></td></tr><?php endforeach ?></tbody></table></div><?php endif ?>
 <?php endif ?>
 <?php if ($receipts): ?><h2>Receipts</h2><ul><?php foreach ($receipts as $r): ?><li><?= local_time($r['received_at']) ?> by <?= esc($r['user']) ?><?= $r['is_final'] ? ' (final)' : '' ?><?= $r['notes'] ? ': ' . esc($r['notes']) : '' ?></li><?php endforeach ?></ul><?php endif ?>
+<?= view('partials/activity', ['type' => 'transfer', 'id' => $t['id']]) ?>
 <?= $this->endSection() ?>
