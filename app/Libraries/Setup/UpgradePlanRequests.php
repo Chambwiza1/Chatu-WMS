@@ -37,5 +37,12 @@ final class UpgradePlanRequests
             $db->query("INSERT IGNORE INTO {$p}role_permissions (role_id, permission_code)
                         SELECT r.id, 'billing.manage' FROM {$p}roles r WHERE r.code = ? OR r.template = ?", [$code, $code]);
         }
+        // core 1.5.6: the plan an invoice moves the organisation to when paid, and the credit taken off it
+        foreach (['switch_plan_id' => 'INT UNSIGNED NULL', 'credit' => 'DECIMAL(14,2) NOT NULL DEFAULT 0'] as $col => $def) {
+            $has = $db->query('SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?', [$p . 'platform_invoices', $col])->getRow();
+            if (! $has) {
+                $db->query("ALTER TABLE {$p}platform_invoices ADD COLUMN {$col} {$def}");
+            }
+        }
     }
 }

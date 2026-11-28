@@ -15,7 +15,9 @@ use App\Libraries\Workflow\Notify;
  * ChatuERP core 1.5.5: an organisation chooses its own plan and asks for its invoice, from Billing.
  *
  *  - Who: the account owner, and people with "Plan and billing" (billing.manage: accountants) or Settings.
- *  - The account owner's request is carried out at once: the plan is set and the invoice issued.
+ *  - The account owner's request is carried out at once: the invoice is issued.
+ *  - The plan changes when that invoice is paid (core 1.5.6), not before.
+ *  - When the plan changes, time left on an invoice of 12 months or more is credited; shorter ones give none.
  *  - Anyone else's request waits for the account owner, who approves or rejects it with a reason.
  *  - One thing at a time: no new request while one waits or while an invoice is unpaid.
  *  - The plan's limits are checked against what the organisation uses, when asking and again when approving.
@@ -102,7 +104,7 @@ final class PlanRequests
         });
     }
 
-    /** The account owner approves a waiting request: the plan is set and the invoice issued. */
+    /** The account owner approves a waiting request: the invoice is issued. */
     public static function approve(int $id): int
     {
         $tid = Tenancy::require();
@@ -208,15 +210,22 @@ final class PlanRequests
         }
     }
 
-    /** Set the plan (if it changes), issue the invoice, close the request, and tell the platform owners. */
+    /**
+     * Issue the invoice, close the request, and tell the platform owners. The plan changes when the invoice is paid
+     * (core 1.5.6). Time left on an invoice of 12 months or more is credited when the plan changes.
+     */
     private static function carryOut(int $id, int $tid, array $plan, int $months, int $by): int
     {
-        $t = Billing::tenant($tid);
-        if ((int) ($t['plan_id'] ?? 0) !== (int) $plan['id']) {
-            Billing::assignPlan($tid, (int) $plan['id'], 'Chosen by the organisation', true);
+        $t      = Billing::tenant($tid);
+        $change = (int) ($t['plan_id'] ?? 0) !== (int) $plan['id'];
+        $credit = $change && ! empty($t['plan_id']) ? min(Billing::credit($tid), round((float) $plan['monthly_price'] * $months, 2)) : 0.0;
+        $who    = (string) Db::value('SELECT name FROM {users} WHERE id = ?', [$by]);
+        $note   = 'Asked for by ' . $who . '.' . ($change ? ' The plan changes to ' . $plan['name'] . ' when this is paid.' : '')
+            . ($credit > 0 ? ' Less ' . Billing::currency() . ' ' . number_format($credit, 2) . ' for the time left on the plan before; the new period starts today.' : '');
+        $inv = Billing::issue($tid, $months, null, $note, null, true, ['plan' => $plan, 'credit' => $credit]);
+        if ((float) Db::value('SELECT amount FROM {platform_invoices} WHERE id = ?', [$inv]) <= 0) {
+            Billing::pay($inv, 'Covered by the credit', 'manual', true);   // nothing to pay: settled, and the plan changes now
         }
-        $who = (string) Db::value('SELECT name FROM {users} WHERE id = ?', [$by]);
-        $inv = Billing::issue($tid, $months, null, 'Asked for by the organisation (' . $who . ')', null, true);
         self::close($id, $tid, 'approved', null, $inv);
         Audit::log('billing.request.approve', 'plan_request', $id, ['status' => 'pending'], ['status' => 'approved', 'invoice_id' => $inv]);
         $num = (string) Db::value('SELECT number FROM {platform_invoices} WHERE id = ?', [$inv]);

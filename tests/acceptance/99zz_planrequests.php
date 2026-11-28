@@ -60,7 +60,7 @@ return [
         $t->true(in_array($a, $ids) && ! in_array($free, $ids), 'plans on offer have a price');
     },
 
-    'PR-2 the account owner: the plan is set and the invoice issued at once; the platform owner is told' => static function (TestKit $t) {
+    'PR-2 the account owner: the invoice is issued at once and the plan changes when it is paid; the platform owner is told' => static function (TestKit $t) {
         [$tid, $a, $b, $small, $free] = pr_start($t, '');
         $t->as('dora');
         $t->throws(static fn () => PlanRequests::ask($a, 0), '1 to 24 months');
@@ -73,13 +73,14 @@ return [
         $i = Billing::invoice($r['invoice'], $tid);
         $t->eq('1050.00', (string) $i['amount'], '3 months of plan B');
         $t->eq($b, (int) $i['plan_id']);
-        $t->eq($b, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'the plan is changed');
+        $t->true($b !== (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'the plan waits for the payment (core 1.5.6)');
+        $t->eq($b, (int) $i['switch_plan_id'], 'the invoice carries the plan to move to');
         $t->eq('approved', Db::value('SELECT status FROM {platform_plan_requests} WHERE id = ?', [$r['request']]));
         $t->throws(static fn () => PlanRequests::ask($a, 1), 'is not paid yet');
-        $t->eq($b, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'a refused request changes nothing');
         pr_pat();
         $t->true(pr_told('%raised invoice%') >= 1, 'the platform owner is told');
         Billing::pay($r['invoice'], 'BANK-1');
+        $t->eq($b, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'paid: now the plan is changed');
         $t->as('dora');
         $r2 = PlanRequests::ask($b, 1);
         $t->true($r2['invoice'] > 0, 'once paid, the next can be asked for');
@@ -87,7 +88,7 @@ return [
         $t->eq(date('Y-m-d', strtotime($i['period_end'] . ' +1 day')), $i2['period_start'], 'it follows the paid period');
     },
 
-    'PR-3 the accountant asks; the account owner approves: only then is the plan set and the invoice issued' => static function (TestKit $t) {
+    'PR-3 the accountant asks; the account owner approves: only then is the invoice issued' => static function (TestKit $t) {
         [$tid, $a, $b] = pr_start($t, '');
         $before = (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]);
         $inv = (int) Db::value('SELECT COUNT(*) FROM {platform_invoices} WHERE tenant_id = ?', [$tid]);
@@ -103,7 +104,7 @@ return [
         $t->true(pr_told('%asks for an invoice%') >= 1, 'the account owner is told');
         $id = PlanRequests::approve($r['request']);
         $t->eq('2400.00', (string) Billing::invoice($id, $tid)['amount'], '12 months of plan A');
-        $t->eq($a, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]));
+        $t->eq($before, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'approved, but the plan still waits for the payment');
         $t->throws(static fn () => PlanRequests::approve($r['request']), 'already approved');
         $t->eq($id, (int) Db::value('SELECT invoice_id FROM {platform_plan_requests} WHERE id = ?', [$r['request']]));
     },
@@ -135,5 +136,54 @@ return [
             $t->throws(static fn () => PlanRequests::approve($r3['request']), 'Request not found');
             $t->eq(0, count(PlanRequests::list($oid)), 'its own list is empty');
         }
+    },
+
+    'PR-5 the plan changes on payment; time left on an invoice of 12 months or more is credited, shorter ones give none' => static function (TestKit $t) {
+        [$tid, $a, $b] = pr_start($t, '');
+        // a clean slate: on plan A, nothing paid ahead
+        Db::exec("UPDATE {platform_invoices} SET status = 'void' WHERE tenant_id = ?", [$tid]);
+        Db::exec('UPDATE {tenants} SET plan_id = ?, paid_until = NULL WHERE id = ?', [$a, $tid]);
+        $t->as('dora');
+        $r = PlanRequests::ask($a, 6);                                   // 6 months of the plan they are on
+        pr_pat();
+        Billing::pay($r['invoice'], 'BANK-6');
+        $t->eq(0.0, Billing::credit($tid), 'six months paid: no credit');
+        $t->as('dora');
+        $r = PlanRequests::ask($b, 1);
+        $i = Billing::invoice($r['invoice'], $tid);
+        $t->eq(['350.00', '0.00'], [(string) $i['amount'], (string) $i['credit']], 'changing plan from a 6-month invoice: full price');
+        $t->true($i['period_start'] > date('Y-m-d'), 'and it follows the paid period');
+        pr_pat();
+        Billing::void($r['invoice'], 'test');
+        Db::exec("UPDATE {platform_invoices} SET status = 'void' WHERE tenant_id = ?", [$tid]);
+        Db::exec('UPDATE {tenants} SET paid_until = NULL WHERE id = ?', [$tid]);
+        $t->as('dora');
+        $r = PlanRequests::ask($a, 12);                                  // a year of plan A: 2,400.00
+        pr_pat();
+        Billing::pay($r['invoice'], 'BANK-12');
+        $y = Billing::invoice($r['invoice'], $tid);
+        $days = (strtotime($y['period_end']) - strtotime($y['period_start'])) / 86400 + 1;
+        $t->eq('2400.00', number_format(Billing::credit($tid), 2, '.', ''), 'on the first day the whole year is unused');
+        $half = date('Y-m-d', strtotime($y['period_start'] . ' +' . (int) ($days / 2) . ' days'));
+        $t->eq(round(2400 * ($days - (int) ($days / 2)) / $days, 2), Billing::credit($tid, $half), 'half way through, about half is left, by the day');
+        $t->as('dora');
+        $r = PlanRequests::ask($a, 1);
+        $t->eq('0.00', (string) Billing::invoice($r['invoice'], $tid)['credit'], 'the same plan again: no credit, it is a renewal');
+        pr_pat();
+        Billing::void($r['invoice'], 'test');
+        $t->as('dora');
+        $r = PlanRequests::ask($b, 12);                                  // a year of plan B: 4,200.00, less the 2,400.00 unused
+        $i = Billing::invoice($r['invoice'], $tid);
+        $t->eq(['1800.00', '2400.00', date('Y-m-d')], [(string) $i['amount'], (string) $i['credit'], $i['period_start']], 'changing plan from an annual invoice: the unused time is taken off, and the new period starts today');
+        $t->eq($a, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'still on plan A until it is paid');
+        pr_pat();
+        Billing::pay($r['invoice'], 'BANK-B');
+        $now = Db::row('SELECT plan_id, paid_until FROM {tenants} WHERE id = ?', [$tid]);
+        $t->eq([$b, $i['period_end']], [(int) $now['plan_id'], $now['paid_until']], 'paid: on plan B, paid until the end of the new period (the old year no longer counts)');
+        $t->as('dora');
+        $r = PlanRequests::ask($a, 1);                                   // down to plan A for a month: 200.00, credit far more
+        $i = Billing::invoice($r['invoice'], $tid);
+        $t->eq(['0.00', '200.00', 'paid'], [(string) $i['amount'], (string) $i['credit'], $i['status']], 'a credit larger than the invoice covers it: nothing to pay, settled at once, no refund');
+        $t->eq($a, (int) Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tid]), 'and the plan changes at once');
     },
 ];

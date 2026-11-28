@@ -217,8 +217,10 @@ final class Billing
     }
 
     /** Invoice an organisation for $months of its plan, starting the day after it is paid until (or invoiced to, or today). */
-    public static function issue(int $tenantId, int $months = 1, ?float $amount = null, ?string $note = null, ?string $today = null, bool $system = false): int
+    public static function issue(int $tenantId, int $months = 1, ?float $amount = null, ?string $note = null, ?string $today = null, bool $system = false, array $switch = []): int
     {
+        // $switch (core 1.5.6, from PlanRequests): ['plan' => row, 'credit' => float]: invoice another plan, which the
+        // organisation moves to when this invoice is paid; with a credit, the new period starts today.
         if (! $system) {   // $system: an invoice the product raises itself (ChatuPass: a one-event pass the organisation orders)
             Access::requirePlatform('platform.tenants');
         }
@@ -230,14 +232,20 @@ final class Billing
         if ($months < 1 || $months > 24) {
             throw new BizException('Invoice 1 to 24 months at a time.');
         }
-        $plan = self::plan($t['plan_id'] ? (int) $t['plan_id'] : null);
+        $plan = $switch['plan'] ?? self::plan($t['plan_id'] ? (int) $t['plan_id'] : null);
         $amount ??= $plan ? (float) $plan['monthly_price'] * $months : 0.0;
+        $credit = round(min((float) ($switch['credit'] ?? 0), $amount), 2);   // never more than the invoice: no refunds
+        $to     = $switch && (int) ($t['plan_id'] ?? 0) !== (int) $plan['id'] ? (int) $plan['id'] : null;
         if ($amount <= 0) {
             throw new BizException('Nothing to invoice: put the organisation on a plan with a price, or type the amount.');
         }
-        return Db::atomic(static function () use ($t, $tenantId, $months, $amount, $note, $today, $plan) {
+        return Db::atomic(static function () use ($t, $tenantId, $months, $amount, $note, $today, $plan, $credit, $to) {
             $last  = Db::value("SELECT MAX(period_end) FROM {platform_invoices} WHERE tenant_id = ? AND status <> 'void'", [$tenantId]);
             $start = max($today, $last ? date('Y-m-d', strtotime($last . ' +1 day')) : '', $t['paid_until'] ? date('Y-m-d', strtotime($t['paid_until'] . ' +1 day')) : '');
+            if ($credit > 0) {   // the unused time is credited, so the new period starts today
+                $start = $today;
+            }
+            $amount -= $credit;
             $end   = date('Y-m-d', strtotime($start . ' +' . $months . ' months -1 day'));
             $month = date('Ym', strtotime($today));
             $seq   = (int) Db::value('SELECT COUNT(*) FROM {platform_invoices} WHERE number LIKE ? FOR UPDATE', ['INV-' . $month . '-%']) + 1;
@@ -245,7 +253,7 @@ final class Billing
             $id    = Db::insert('platform_invoices', ['tenant_id' => $tenantId, 'number' => $num, 'plan_id' => $plan['id'] ?? null, 'months' => $months,
                 'period_start' => $start, 'period_end' => $end, 'amount' => round($amount, 2), 'currency' => self::currency(), 'status' => 'issued',
                 'issued_at' => Db::now(), 'issued_by' => Auth::id(), 'due_on' => date('Y-m-d', strtotime($today . ' +' . self::dueDays() . ' days')),
-                'note' => $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 255) : null]);
+                'note' => $note !== null && trim($note) !== '' ? mb_substr(trim($note), 0, 255) : null, 'switch_plan_id' => $to, 'credit' => $credit]);
             $after = ['number' => $num, 'amount' => round($amount, 2), 'from' => $start, 'to' => $end];
             Tenancy::run(null, static fn () => Audit::log('platform.invoice.issue', 'platform_invoice', $id, null, $after));
             Tenancy::run($tenantId, static function () use ($tenantId, $num, $amount, $start, $end, $id) {
@@ -279,7 +287,14 @@ final class Billing
             }
             Db::exec("UPDATE {platform_invoices} SET status = 'paid', paid_at = ?, paid_ref = ?, paid_via = ? WHERE id = ?", [Db::now(), mb_substr($reference, 0, 100), $via, $i['id']]);
             $tid = (int) $i['tenant_id'];
-            Db::exec('UPDATE {tenants} SET paid_until = GREATEST(COALESCE(paid_until, ?), ?) WHERE id = ?', [$i['period_end'], $i['period_end'], $tid]);
+            if ((float) ($i['credit'] ?? 0) > 0) {   // core 1.5.6: the old period was credited, so this invoice's period replaces it
+                Db::exec('UPDATE {tenants} SET paid_until = ? WHERE id = ?', [$i['period_end'], $tid]);
+            } else {
+                Db::exec('UPDATE {tenants} SET paid_until = GREATEST(COALESCE(paid_until, ?), ?) WHERE id = ?', [$i['period_end'], $i['period_end'], $tid]);
+            }
+            if (! empty($i['switch_plan_id'])) {   // core 1.5.6: the plan changes on payment
+                self::switchPlan($tid, (int) $i['switch_plan_id'], $i['number']);
+            }
             $t = Db::row('SELECT * FROM {tenants} WHERE id = ?', [$tid]);
             $overdue = Db::value("SELECT 1 FROM {platform_invoices} WHERE tenant_id = ? AND status = 'issued' AND due_on < ?", [$tid, date('Y-m-d')]);
             $reopen = ! $overdue && in_array($t['status'], ['trial', 'past_due', 'suspended'], true)
@@ -296,6 +311,34 @@ final class Billing
                 }
             });
         });
+    }
+
+    /**
+     * core 1.5.6: what is left of the time already paid for, in money. Only invoices of 12 months or more count
+     * ("annual plans and above"); shorter ones give no credit. Counted by the day, from $today to the end of each.
+     */
+    public static function credit(int $tenantId, ?string $today = null): float
+    {
+        $today ??= date('Y-m-d');
+        $sum = 0.0;
+        foreach (Db::rows("SELECT amount, credit, period_start, period_end FROM {platform_invoices} WHERE tenant_id = ? AND status = 'paid' AND months >= 12 AND period_end >= ?", [$tenantId, $today]) as $i) {
+            $all  = (strtotime($i['period_end']) - strtotime($i['period_start'])) / 86400 + 1;
+            $left = (strtotime($i['period_end']) - strtotime(max($today, $i['period_start']))) / 86400 + 1;
+            $sum += ((float) $i['amount'] + (float) $i['credit']) * $left / max(1, $all);
+        }
+        return round($sum, 2);
+    }
+
+    /** core 1.5.6: the plan a paid invoice moves the organisation to. Payment is never refused over a limit. */
+    private static function switchPlan(int $tenantId, int $planId, string $number): void
+    {
+        try {
+            self::assignPlan($tenantId, $planId, 'Invoice ' . $number . ' paid', true);
+        } catch (BizException $e) {
+            $was = Db::value('SELECT plan_id FROM {tenants} WHERE id = ?', [$tenantId]);
+            Db::exec('UPDATE {tenants} SET plan_id = ? WHERE id = ?', [$planId, $tenantId]);
+            Tenancy::run($tenantId, static fn () => Audit::log('tenant.plan', 'tenant', $tenantId, ['plan_id' => $was], ['plan_id' => $planId], 'success', 'Invoice ' . $number . ' paid. Over the plan: ' . $e->getMessage()));
+        }
     }
 
     public static function void(int $invoiceId, string $reason): void

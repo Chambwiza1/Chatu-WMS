@@ -37,7 +37,8 @@ class Billing extends BaseController
             return $this->render('billing/index', ['t' => $t, 'limits' => B::limits($tid), 'days' => B::trialDaysLeft($t), 'rows' => B::invoices($tid, 100),
                 'single' => Tenancy::single(), 'currency' => B::currency(), 'offered' => Tenancy::single() ? [] : PlanRequests::offered(),
                 'requests' => Tenancy::single() ? [] : PlanRequests::list($tid), 'isOwner' => PlanRequests::isOwner($tid),
-                'unpaid' => Db::value("SELECT number FROM {platform_invoices} WHERE tenant_id = ? AND status = 'issued' ORDER BY id LIMIT 1", [$tid])], 'Billing');
+                'unpaid' => Db::value("SELECT number FROM {platform_invoices} WHERE tenant_id = ? AND status = 'issued' ORDER BY id LIMIT 1", [$tid]),
+                'switching' => Db::row("SELECT i.number, p.name FROM {platform_invoices} i JOIN {platform_plans} p ON p.id = i.switch_plan_id WHERE i.tenant_id = ? AND i.status = 'issued' ORDER BY i.id LIMIT 1", [$tid])], 'Billing');
         });
     }
 
@@ -126,7 +127,7 @@ class Billing extends BaseController
     {
         return $this->act(function () use ($id) {
             if ($this->in('do', '') === 'approve') {
-                return $this->ok('Approved. The invoice is issued.', 'billing/invoices/' . PlanRequests::approve($id));
+                return $this->ok('Approved. The invoice is issued; a new plan starts when it is paid.', 'billing/invoices/' . PlanRequests::approve($id));
             }
             PlanRequests::reject($id, (string) $this->in('reason', ''));
             return $this->ok('Rejected. The person who asked has been told.', 'billing');
