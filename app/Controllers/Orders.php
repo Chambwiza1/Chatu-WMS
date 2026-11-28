@@ -34,8 +34,9 @@ class Orders extends BaseController
             $b[] = $st;
         }
         if (($q = trim((string) $this->request->getGet('q'))) !== '') {
-            $w .= ' AND (so.number LIKE ? OR c.name LIKE ? OR so.customer_ref LIKE ?)';
-            $b = array_merge($b, ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%']);
+            [$fw, $fb] = \App\Libraries\Core\Find::where($q, ['so.number', 'c.name', 'c.code', 'so.customer_ref']);   // core 1.7 (D1)
+            $w .= ' AND ' . $fw;
+            $b = array_merge($b, $fb);
         }
         $rows = Db::rows("SELECT so.*, c.name customer, w.code wh, (SELECT SUM(l.qty * l.unit_price) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) amount,
                                 (SELECT SUM(l.qty) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) q, (SELECT SUM(l.qty_shipped) FROM {so_lines} l WHERE l.tenant_id = {tid} AND l.so_id = so.id) s

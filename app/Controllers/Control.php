@@ -35,9 +35,10 @@ class Control extends BaseController
         $q = trim((string) $this->request->getGet('q'));
         $rows = [];
         if ($q !== '') {
+            [$fw, $fb] = \App\Libraries\Core\Find::where($q, ['i.sku', 'i.name', 'l.lot_no', 'se.serial_no'], ['b.code']);   // core 1.7 (D1)
             $rows = Db::rows('SELECT s.*, i.sku, i.name, i.uom, i.decimals, b.code bin, l.lot_no, l.expiry_date, se.serial_no FROM {stock} s JOIN {items} i ON i.id = s.item_id JOIN {bins} b ON b.id = s.bin_id
-                               LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND (i.sku LIKE ? OR i.name LIKE ? OR l.lot_no LIKE ? OR se.serial_no LIKE ? OR b.code = ?)
-                               ORDER BY i.sku, b.code LIMIT 100', [$wh, '%' . $q . '%', '%' . $q . '%', '%' . $q . '%', '%' . $q . '%', strtoupper($q)]);
+                               LEFT JOIN {lots} l ON l.id = s.lot_id LEFT JOIN {serials} se ON se.id = s.serial_id WHERE s.tenant_id = {tid} AND s.warehouse_id = ? AND ' . $fw . '
+                               ORDER BY i.sku, b.code LIMIT 100', array_merge([$wh], $fb));
         }
         return $this->render('control/adjustment_form', ['wh' => $wh, 'q' => $q, 'rows' => $rows, 'bins' => Warehouses::bins($wh),
             'reasons' => Db::rows("SELECT * FROM {reasons} WHERE tenant_id = {tid} AND use_for = 'adjust' AND active = 1 ORDER BY label")], 'New adjustment');

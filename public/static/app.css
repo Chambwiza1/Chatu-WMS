@@ -732,3 +732,15 @@ a.kpi:hover { border-color: var(--patina); }
 .hbar .bar { height: 12px; background: var(--steel-1); border-radius: 6px; overflow: hidden; }
 .hbar .bar i { display: block; height: 100%; background: var(--patina); }
 .hbar .v { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 0.7.0 (core 1.7, D2): type-ahead pickers */
+.suggest.picker { z-index: 950; max-height: 320px; }
+.select-find { display: block; width: 100%; margin: 0 0 4px; padding: 5px 9px; font-size: .9rem; }
+
+/* 0.7.0 (core 1.7, D4): bulk edit */
+details.bulk { margin-top: 16px; }
+details.bulk > summary { cursor: pointer; list-style: none; }
+details.bulk > summary::-webkit-details-marker { display: none; }
+details.bulk > summary h2 { display: inline; font-size: 1.05rem; margin: 0; }
+details.bulk > summary::before { content: "\25B8"; margin-right: 8px; color: var(--ink-2); }
+details.bulk[open] > summary::before { content: "\25BE"; }

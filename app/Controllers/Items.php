@@ -14,11 +14,11 @@ class Items extends BaseController
             return $this->need('item.view');
         }
         $q = trim((string) $this->request->getGet('q'));
-        $w = '1=1';
-        $b = [];
+        // core 1.7 (D1): words in any order, part of a code, an exact barcode or a pack's
+        [$w, $b] = \App\Libraries\Core\Find::where($q, ['i.sku', 'i.name', 'i.description'], ['i.barcode']);
         if ($q !== '') {
-            $w = '(i.sku LIKE ? OR i.name LIKE ? OR i.barcode = ?)';
-            $b = ['%' . $q . '%', '%' . $q . '%', $q];
+            $w = '(' . $w . " OR EXISTS (SELECT 1 FROM {item_units} u WHERE u.tenant_id = i.tenant_id AND u.item_id = i.id AND u.barcode = ? AND u.barcode <> ''))";
+            $b[] = trim($q);
         }
         if (($k = (string) $this->request->getGet('kind')) !== '' && isset(I::KINDS[$k])) {
             $w .= ' AND i.kind = ?';
@@ -26,6 +26,15 @@ class Items extends BaseController
         }
         $rows = Db::rows("SELECT i.*, c.name category, (SELECT COALESCE(SUM(s.qty), 0) FROM {stock} s WHERE s.tenant_id = {tid} AND s.item_id = i.id) on_hand FROM {items} i LEFT JOIN {item_categories} c ON c.id = i.category_id WHERE i.tenant_id = {tid} AND $w ORDER BY i.active DESC, i.sku LIMIT 500", $b);
         return $this->render('items/index', ['rows' => $rows, 'q' => $q, 'kind' => $k], 'Items');
+    }
+
+    /** core 1.7 (D4): change the ticked items at once; all or nothing, each change in the audit log. */
+    public function bulk()
+    {
+        return $this->act(function () {
+            $n = I::bulkUpdate((array) ($this->request->getPost('ids') ?? []), (array) $this->request->getPost());
+            return $this->ok($n === 0 ? 'Nothing needed changing.' : $n . ' item' . ($n === 1 ? '' : 's') . ' changed.', 'items' . ($this->request->getPost('back') ? '?' . ltrim((string) $this->request->getPost('back'), '?') : ''));
+        }, site_url('items'));
     }
 
     public function form(?int $id = null)

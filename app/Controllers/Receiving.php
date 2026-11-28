@@ -86,8 +86,9 @@ class Receiving extends BaseController
             $w .= ' AND s.id = ?';
             $b[] = $sid;
         } elseif ($q !== '') {
-            $w .= ' AND (i.sku LIKE ? OR i.name LIKE ? OR l.lot_no LIKE ? OR se.serial_no LIKE ?)';
-            $b = array_merge($b, array_fill(0, 4, '%' . $q . '%'));
+            [$fw, $fb] = \App\Libraries\Core\Find::where($q, ['i.sku', 'i.name', 'l.lot_no', 'se.serial_no']);   // core 1.7 (D1)
+            $w .= ' AND ' . $fw;
+            $b = array_merge($b, $fb);
         } else {
             $w .= " AND s.status IN ('quarantine','damaged')";
         }

@@ -120,15 +120,10 @@ class Stock extends BaseController
             return $r;
         }
         $q = trim((string) $this->request->getGet('q'));
-        $b = [];
-        $w = '1=1';
-        if ($q !== '') {
-            $w = '(l.lot_no LIKE ? OR i.sku LIKE ? OR i.name LIKE ?)';
-            $b = ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%'];
-        }
+        [$w, $b] = \App\Libraries\Core\Find::where($q, ['l.lot_no', 'l.supplier_lot', 'i.sku', 'i.name']);   // core 1.7 (D1)
         $rows = Db::rows("SELECT l.*, i.sku, i.name, i.uom, i.decimals, (SELECT COALESCE(SUM(s.qty), 0) FROM {stock} s WHERE s.tenant_id = {tid} AND s.lot_id = l.id) on_hand FROM {lots} l JOIN {items} i ON i.id = l.item_id
                            WHERE l.tenant_id = {tid} AND $w ORDER BY on_hand > 0 DESC, l.expiry_date IS NULL, l.expiry_date, l.id DESC LIMIT 300", $b);
-        $serials = $q !== '' ? Db::rows('SELECT se.*, i.sku, w.code wh FROM {serials} se JOIN {items} i ON i.id = se.item_id LEFT JOIN {warehouses} w ON w.id = se.warehouse_id WHERE se.tenant_id = {tid} AND se.serial_no LIKE ? ORDER BY se.serial_no LIMIT 50', ['%' . $q . '%']) : [];
+        $serials = $q !== '' ? Db::rows('SELECT se.*, i.sku, w.code wh FROM {serials} se JOIN {items} i ON i.id = se.item_id LEFT JOIN {warehouses} w ON w.id = se.warehouse_id WHERE se.tenant_id = {tid} AND se.serial_no LIKE ? ORDER BY se.serial_no LIMIT 50', [\App\Libraries\Core\Find::like($q)]) : [];
         return $this->render('stock/lots', ['rows' => $rows, 'serials' => $serials, 'q' => $q], 'Batches and serial numbers');
     }
 

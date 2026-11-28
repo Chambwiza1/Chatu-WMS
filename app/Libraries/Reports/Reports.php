@@ -62,6 +62,7 @@ final class Reports
         switch ($code) {
             case 'on_hand':
                 [$w] = self::wh('s.warehouse_id', $whId);
+                $fq  = \App\Libraries\Core\Find::where((string) ($f['q'] ?? ''), ['i.sku', 'i.name'], ['i.barcode']);   // core 1.7 (D1)
                 $rows = Db::rows("SELECT wh.code warehouse, i.sku, i.name, i.uom,
                         SUM(CASE WHEN s.status = 'available' AND b.pickable = 1 AND b.status = 'active' AND (l.id IS NULL OR (l.status = 'active' AND (l.expiry_date IS NULL OR l.expiry_date >= CURDATE()))) THEN s.qty - s.qty_allocated ELSE 0 END) free_qty,
                         SUM(s.qty_allocated) reserved,
@@ -71,7 +72,7 @@ final class Reports
                         SUM(CASE WHEN s.status = 'damaged' THEN s.qty ELSE 0 END) damaged,
                         SUM(s.qty) on_hand
                     FROM {stock} s JOIN {items} i ON i.id = s.item_id JOIN {warehouses} wh ON wh.id = s.warehouse_id JOIN {bins} b ON b.id = s.bin_id LEFT JOIN {lots} l ON l.id = s.lot_id
-                   WHERE s.tenant_id = {tid} AND $w " . (! empty($f['q']) ? 'AND (i.sku LIKE ? OR i.name LIKE ?)' : '') . ' GROUP BY s.warehouse_id, s.item_id ORDER BY wh.code, i.sku', ! empty($f['q']) ? ['%' . $f['q'] . '%', '%' . $f['q'] . '%'] : []);
+                   WHERE s.tenant_id = {tid} AND $w AND " . $fq[0] . ' GROUP BY s.warehouse_id, s.item_id ORDER BY wh.code, i.sku', $fq[1]);
                 return ['columns' => ['warehouse' => 'Warehouse', 'sku' => 'Item', 'name' => 'Description', 'uom' => 'Unit', 'free_qty' => 'Free', 'reserved' => 'Reserved', 'to_put_away' => 'To put away', 'held' => 'Held', 'expired' => 'Expired', 'damaged' => 'Damaged', 'on_hand' => 'On hand'],
                     'rows' => $rows, 'num' => ['free_qty', 'reserved', 'to_put_away', 'held', 'expired', 'damaged', 'on_hand']];
 
@@ -107,8 +108,9 @@ final class Reports
                 $b = [$from . ' 00:00:00', $to . ' 23:59:59'];
                 $extra = '';
                 if (! empty($f['q'])) {
-                    $extra = ' AND (i.sku LIKE ? OR l.lot_no LIKE ? OR se.serial_no LIKE ?)';
-                    $b = array_merge($b, ['%' . $f['q'] . '%', '%' . $f['q'] . '%', '%' . $f['q'] . '%']);
+                    $fm = \App\Libraries\Core\Find::where((string) $f['q'], ['i.sku', 'i.name', 'l.lot_no', 'se.serial_no']);   // core 1.7 (D1)
+                    $extra = ' AND ' . $fm[0];
+                    $b = array_merge($b, $fm[1]);
                 }
                 $rows = Db::rows("SELECT m.at, wh.code warehouse, m.type, CONCAT(m.doc_type, ' ', COALESCE(m.doc_id, '')) doc, i.sku, l.lot_no, se.serial_no, fb.code from_bin, tb.code to_bin,
                         CONCAT_WS(' > ', m.from_status, m.to_status) status, IF(m.to_bin_id IS NOT NULL AND m.from_bin_id IS NULL, m.qty, IF(m.from_bin_id IS NOT NULL AND m.to_bin_id IS NULL, -m.qty, m.qty)) qty,

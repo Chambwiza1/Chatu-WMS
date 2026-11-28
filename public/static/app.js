@@ -89,7 +89,7 @@
   function itemOption(value) {
     const v = (value || '').trim().toUpperCase();
     const code = v.split(' — ')[0];
-    return [...document.querySelectorAll('#item-list option')].find((o) => o.value.toUpperCase() === v || o.value.toUpperCase().split(' — ')[0] === code);
+    return [...document.querySelectorAll('#item-list-data option')].find((o) => o.value.toUpperCase() === v || o.value.toUpperCase().split(' — ')[0] === code);
   }
   function fillUnits(row, opt, keep) {
     const sel = row.querySelector('select[data-unit]');
@@ -568,5 +568,112 @@
   });
   document.addEventListener('click', (e) => {
     document.querySelectorAll('details.quickadd[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+  });
+})();
+
+/* Chatu Warehouse 0.7.0 (core 1.7, D2): type-ahead pickers. An item box lists matching items as you type (words in any
+   order, part of a code, a barcode or a pack's barcode); arrows and Enter or a tap pick one. A scanner (keys faster than
+   a person types, ending in Enter) never opens the list: an exact code is taken at once and the cursor moves on.
+   A list of customers or suppliers marked data-find gets a box above it that narrows the list as you type. */
+(function () {
+  'use strict';
+  const data = () => [...document.querySelectorAll('#item-list-data option')];
+  const norm = (t) => (t || '').toLowerCase();
+  let box = null; let owner = null; let pos = -1; let last = 0; let fast = 0;
+  function close() { if (box) { box.remove(); box = null; } if (owner) owner.setAttribute('aria-expanded', 'false'); pos = -1; }
+  function pick(inp, opt) {
+    inp.value = opt.value;
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    inp.dispatchEvent(new Event('change', { bubbles: true }));
+    close();
+    const row = inp.closest('tr');
+    const next = row && [...row.querySelectorAll('input:not([type=hidden]), select')].find((x) => x !== inp && !x.disabled && x.offsetParent !== null && x.type !== 'button');
+    if (next) next.focus();
+  }
+  function exact(v) {
+    const u = v.trim().toUpperCase();
+    if (!u) return null;
+    return data().find((o) => o.value.toUpperCase() === u || o.value.toUpperCase().split(' — ')[0] === u || (o.dataset.codes || '').split(' ').some((c) => c && c.toUpperCase() === u)) || null;
+  }
+  function open(inp) {
+    const words = norm(inp.value).split(/\s+/).filter(Boolean);
+    close();
+    if (!words.length) return;
+    const hits = data().filter((o) => { const h = norm(o.value + ' ' + (o.dataset.codes || '')); return words.every((w) => h.includes(w)); }).slice(0, 12);
+    owner = inp;
+    box = document.createElement('div');
+    box.className = 'suggest picker'; box.setAttribute('role', 'listbox'); box.id = 'picker-list';
+    if (!hits.length) { const p = document.createElement('p'); p.className = 'muted'; p.textContent = 'No item matches'; box.appendChild(p); }
+    hits.forEach((o) => {
+      const a = document.createElement('a'); a.href = '#'; a.setAttribute('role', 'option');
+      const [code, ...rest] = o.value.split(' — ');
+      const t = document.createElement('span'); t.textContent = code; a.appendChild(t);
+      const sm = document.createElement('small'); sm.textContent = rest.join(' — ') + (o.dataset.uom ? ' · ' + o.dataset.uom : ''); a.appendChild(sm);
+      a.addEventListener('mousedown', (e) => { e.preventDefault(); pick(inp, o); });
+      a._opt = o; box.appendChild(a);
+    });
+    const r = inp.getBoundingClientRect();
+    box.style.position = 'absolute'; box.style.left = (r.left + window.scrollX) + 'px'; box.style.top = (r.bottom + window.scrollY + 2) + 'px';
+    box.style.width = Math.max(r.width, 320) + 'px'; box.style.right = 'auto';
+    document.body.appendChild(box);
+    inp.setAttribute('aria-expanded', 'true'); inp.setAttribute('aria-controls', 'picker-list');
+  }
+  document.addEventListener('keydown', (e) => {
+    const inp = e.target.closest && e.target.closest('input[list="item-list"]');
+    if (!inp) return;
+    const now = performance.now();
+    if (e.key.length === 1) { fast = now - last < 35 ? fast + 1 : 0; last = now; }
+    const links = box ? [...box.querySelectorAll('a')] : [];
+    if (e.key === 'ArrowDown' && links.length) { pos = Math.min(links.length - 1, pos + 1); links.forEach((a, i) => a.classList.toggle('on', i === pos)); e.preventDefault(); }
+    else if (e.key === 'ArrowUp' && links.length) { pos = Math.max(0, pos - 1); links.forEach((a, i) => a.classList.toggle('on', i === pos)); e.preventDefault(); }
+    else if (e.key === 'Escape') { close(); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();   // never submits the form from an item box
+      if (pos >= 0 && links[pos]) { pick(inp, links[pos]._opt); return; }
+      const o = exact(inp.value) || (links.length === 1 ? links[0]._opt : null);
+      if (o) pick(inp, o); else if (!box) open(inp);
+    }
+  });
+  document.addEventListener('input', (e) => {
+    const inp = e.target.closest && e.target.closest('input[list="item-list"]');
+    if (!inp || !e.isTrusted) return;
+    // a scanner types faster than a person: do not open the list for it
+    if (fast >= 3) { close(); return; }
+    open(inp);
+  });
+  document.addEventListener('focusout', (e) => { if (e.target.closest && e.target.closest('input[list="item-list"]')) setTimeout(close, 120); });
+  window.addEventListener('resize', close);
+
+  // a long list of customers or suppliers: a box above it narrows it as you type
+  document.querySelectorAll('select[data-find]').forEach((sel) => {
+    const f = document.createElement('input');
+    f.type = 'search'; f.className = 'select-find'; f.placeholder = 'Type to narrow the list'; f.setAttribute('aria-label', 'Narrow the list: ' + (sel.labels && sel.labels[0] ? sel.labels[0].textContent : ''));
+    sel.parentNode.insertBefore(f, sel);
+    f.addEventListener('input', () => {
+      const words = norm(f.value).split(/\s+/).filter(Boolean);
+      let shown = [];
+      [...sel.options].forEach((o) => { if (!o.value) return; const hit = words.every((w) => norm(o.textContent).includes(w)); o.hidden = !hit; if (hit) shown.push(o); });
+      if (shown.length === 1) { sel.value = shown[0].value; sel.dispatchEvent(new Event('change', { bubbles: true })); }
+    });
+    f.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sel.focus(); } });
+  });
+})();
+
+/* Chatu Warehouse 0.7.0 (core 1.7, D4): bulk edit takes the items ticked in the list. */
+(function () {
+  'use strict';
+  document.querySelectorAll('form[data-bulk-for]').forEach((f) => {
+    const list = document.getElementById(f.dataset.bulkFor);
+    if (!list) return;
+    const count = f.querySelector('[data-bulk-count]');
+    const ticked = () => [...list.querySelectorAll('input[name="ids[]"]:checked')];
+    const paint = () => { if (count) { const n = ticked().length; count.textContent = n ? n + ' ticked' : 'Tick items in the list first'; } };
+    list.addEventListener('change', paint); paint();
+    f.addEventListener('submit', (e) => {
+      f.querySelectorAll('input[data-bulk-id]').forEach((x) => x.remove());
+      const ids = ticked();
+      if (!ids.length) { e.preventDefault(); paint(); return; }
+      ids.forEach((c) => { const h = document.createElement('input'); h.type = 'hidden'; h.name = 'ids[]'; h.value = c.value; h.dataset.bulkId = '1'; f.appendChild(h); });
+    });
   });
 })();

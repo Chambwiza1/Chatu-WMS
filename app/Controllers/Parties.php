@@ -31,12 +31,7 @@ class Parties extends BaseController
             return $this->need($this->perm($t));
         }
         $q = trim((string) $this->request->getGet('q'));
-        $w = '1=1';
-        $b = [];
-        if ($q !== '') {
-            $w = '(code LIKE ? OR name LIKE ? OR phone LIKE ?)';
-            $b = ['%' . $q . '%', '%' . $q . '%', '%' . $q . '%'];
-        }
+        [$w, $b] = \App\Libraries\Core\Find::where($q, ['code', 'name', 'contact', 'phone', 'email']);   // core 1.7 (D1)
         $extra = $t === 'suppliers'
             ? ", (SELECT COUNT(*) FROM {purchase_orders} p WHERE p.tenant_id = {tid} AND p.supplier_id = x.id AND p.status IN ('open','partly_received')) open_docs"
             : ", (SELECT COUNT(*) FROM {sales_orders} s WHERE s.tenant_id = {tid} AND s.customer_id = x.id AND s.status IN ('confirmed','in_progress','dispatched')) open_docs";

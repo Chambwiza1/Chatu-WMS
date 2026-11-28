@@ -277,6 +277,90 @@ final class Items
         });
     }
 
+    /**
+     * Bulk edit on screen (core 1.7, D4; as ChatuPOS beta21): change several items at once: category, reorder level and
+     * quantity, minimum shelf days, selling price (set, or up or down by a percentage or an amount), switched on or off.
+     * Each item goes through save(), so every rule and the audit log apply; all or nothing. Returns how many changed.
+     */
+    public static function bulkUpdate(array $ids, array $c): int
+    {
+        Access::require('item.update');
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (! $ids) {
+            throw new BizException('Tick the items to change.');
+        }
+        if (count($ids) > 500) {
+            throw new BizException('Change at most 500 items at a time.');
+        }
+        $mode = (string) ($c['price_mode'] ?? '');
+        $pv   = str_replace(',', '', trim((string) ($c['price_value'] ?? '')));
+        if ($mode !== '' && (! in_array($mode, ['set', 'up_pct', 'down_pct', 'up_amt', 'down_amt'], true) || ! is_numeric($pv) || (float) $pv < 0)) {
+            throw new BizException('Give the price change as a number of 0 or more.');
+        }
+        if ($mode === 'down_pct' && (float) $pv >= 100) {
+            throw new BizException('A price can come down by less than 100%.');
+        }
+        $num = static function (string $k) use ($c): ?float {
+            $v = str_replace(',', '', trim((string) ($c[$k] ?? '')));
+            if ($v === '') {
+                return null;
+            }
+            if (! is_numeric($v) || (float) $v < 0) {
+                throw new BizException('Give a number of 0 or more.');
+            }
+            return (float) $v;
+        };
+        $rl = $num('reorder_level');
+        $rq = $num('reorder_qty');
+        $ms = $num('min_shelf_days');
+        $cat = (string) ($c['category_id'] ?? '');
+        $act = (string) ($c['active'] ?? '');
+        if ($cat !== '' && $cat !== 'none' && ! Db::value('SELECT 1 FROM {item_categories} WHERE tenant_id = {tid} AND id = ?', [(int) $cat])) {
+            throw new BizException('Choose a category from the list.');
+        }
+        if ($act === '0') {
+            Access::require('item.delete');
+        }
+        if ($mode === '' && $rl === null && $rq === null && $ms === null && $cat === '' && $act === '') {
+            throw new BizException('Choose what to change.');
+        }
+        return Db::atomic(static function () use ($ids, $mode, $pv, $rl, $rq, $ms, $cat, $act) {
+            $n = 0;
+            foreach ($ids as $id) {
+                $i = self::get($id);
+                $p = (float) $i['sell_price'];
+                $v = (float) $pv;
+                $price = match ($mode) {
+                    'set' => $v, 'up_pct' => $p * (100 + $v) / 100, 'down_pct' => $p * (100 - $v) / 100, 'up_amt' => $p + $v, 'down_amt' => $p - $v, default => $p,
+                };
+                $price = round($price, 2);
+                if ($price < 0) {
+                    throw new BizException($i['sku'] . ' would sell for less than nothing.');
+                }
+                $d = $i;
+                $d['sell_price']     = $price;
+                $d['reorder_level']  = $rl ?? $i['reorder_level'];
+                $d['reorder_qty']    = $rq ?? $i['reorder_qty'];
+                $d['min_shelf_days'] = $ms !== null ? (int) $ms : $i['min_shelf_days'];
+                $d['category_id']    = $cat === '' ? $i['category_id'] : ($cat === 'none' ? '' : (int) $cat);
+                $d['active']         = $act === '' ? (int) $i['active'] : (int) $act;
+                $same = abs($price - (float) $i['sell_price']) < 0.005 && (float) $d['reorder_level'] == (float) $i['reorder_level'] && (float) $d['reorder_qty'] == (float) $i['reorder_qty']
+                    && (int) $d['min_shelf_days'] === (int) $i['min_shelf_days'] && (string) ($d['category_id'] ?? '') === (string) ($i['category_id'] ?? '') && (int) $d['active'] === (int) $i['active'];
+                if ($same) {
+                    continue;
+                }
+                unset($d['id'], $d['units']);
+                try {
+                    self::save($d, $id);
+                } catch (BizException $e) {
+                    throw new BizException($i['sku'] . ' ' . $i['name'] . ': ' . $e->getMessage());
+                }
+                $n++;
+            }
+            return $n;
+        });
+    }
+
     public static function categories(): array
     {
         return Db::rows('SELECT * FROM {item_categories} WHERE tenant_id = {tid} AND active = 1 ORDER BY name');
@@ -303,7 +387,8 @@ final class Items
             $b = $kinds;
         }
         return Db::rows("SELECT i.id, i.sku, i.name, i.uom, i.tracking, i.decimals, i.expiry_required,
-                                (SELECT GROUP_CONCAT(CONCAT(u.name, ':', u.factor + 0, ':', u.buy_default, u.sell_default) ORDER BY u.factor SEPARATOR '|') FROM {item_units} u WHERE u.tenant_id = {tid} AND u.item_id = i.id) units
+                                (SELECT GROUP_CONCAT(CONCAT(u.name, ':', u.factor + 0, ':', u.buy_default, u.sell_default) ORDER BY u.factor SEPARATOR '|') FROM {item_units} u WHERE u.tenant_id = {tid} AND u.item_id = i.id) units,
+                                CONCAT_WS(' ', NULLIF(i.barcode, ''), (SELECT GROUP_CONCAT(u.barcode SEPARATOR ' ') FROM {item_units} u WHERE u.tenant_id = {tid} AND u.item_id = i.id AND u.barcode <> '')) codes
                            FROM {items} i WHERE i.tenant_id = {tid} AND " . str_replace(['active', 'kind'], ['i.active', 'i.kind'], $w) . ' ORDER BY i.sku', $b);
     }
 }

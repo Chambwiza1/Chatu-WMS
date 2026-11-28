@@ -83,6 +83,7 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
     // lists
     $routes->get('items', 'Items::index');
     $routes->get('items/new', 'Items::form');
+    $routes->post('items/bulk', 'Items::bulk');                         // core 1.7 (D4): bulk edit on screen
     $routes->post('items', 'Items::save');
     $routes->get('items/(:num)', 'Items::form/$1');
     $routes->post('items/(:num)', 'Items::save/$1');
