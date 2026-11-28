@@ -30,6 +30,7 @@ if ($me) {
         ],
         'Know' => [
             ['/dashboard', 'Dashboard', can('stock.view')],
+            ['/overdue', 'Late and overdue', can('stock.view')],
             ['/reports', 'Reports', can('report.view') || can('stock.view')],
         ],
         'Lists' => [

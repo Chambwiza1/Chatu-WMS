@@ -46,6 +46,9 @@ final class Settings
         'live_popups'          => '1',     // core 1.1 (E2): new messages pop up on screen and stay until closed
         'live_sound'           => '1',
         'live_alerts'          => '1',     // core 1.3 (E1): what waits for a person pops up too (approvals, expiry, reorder)
+        'escalate_days'        => '2',     // core 1.8 (E4): working days before overdue work is chased, and twice that before managers are told
+        'working_days'         => '1,2,3,4,5', // core 1.8: ISO weekdays the organisation works (1 = Monday); public holidays below
+        'holidays'             => '',      // core 1.8: public holidays, YYYY-MM-DD separated by commas or spaces
         'notify_customers'     => '1',     // core 1.4 (E5): customers are told when their goods leave and arrive (if a sender is set)
         'wa_mode'              => 'off',   // core 1.4 (E5): own (the organisation's WhatsApp Business number) or off
         'brand_theme'          => 'green', // core 1.3 (C2): a ready palette, or 'custom'

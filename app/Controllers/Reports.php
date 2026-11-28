@@ -43,6 +43,16 @@ class Reports extends BaseController
     }
 
     /** Recall look-up: a batch number or a serial number. */
+    /** core 1.8 (E4): what is late, at the person's warehouses, with who has been told. */
+    public function overdue()
+    {
+        if ($r = $this->need('stock.view')) {
+            return $r;
+        }
+        $rows = \App\Libraries\Workflow\Escalate::overdue(\App\Libraries\Core\Access::warehouses('stock.view'));
+        return $this->render('reports/overdue', ['rows' => $rows, 'limit' => (int) \App\Libraries\Core\Settings::tenant('escalate_days', '2')], 'Late and overdue');
+    }
+
     /** core 1.6 (C12): the dashboard, for the person's own warehouses. */
     public function overview()
     {

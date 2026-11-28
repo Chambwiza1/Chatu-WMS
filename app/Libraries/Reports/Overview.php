@@ -57,6 +57,7 @@ final class Overview
                                             WHERE l.tenant_id = {tid} AND s.warehouse_id IN ($w) AND l.expiry_date IS NOT NULL AND l.expiry_date <= ?", [gmdate('Y-m-d', strtotime('+30 days'))]),
             'below' => (int) Db::value("SELECT COUNT(*) FROM (SELECT i.id FROM {items} i LEFT JOIN {stock} s ON s.tenant_id = i.tenant_id AND s.item_id = i.id AND s.warehouse_id IN ($w) AND s.status = 'available'
                                          WHERE i.tenant_id = {tid} AND i.active = 1 AND i.reorder_level > 0 GROUP BY i.id HAVING COALESCE(SUM(s.qty), 0) < MAX(i.reorder_level)) x"),
+            'overdue' => count(\App\Libraries\Workflow\Escalate::overdue($ids)),   // core 1.8
             'value' => null, 'byWh' => [], 'losses' => null,
         ];
         if ($cost) {

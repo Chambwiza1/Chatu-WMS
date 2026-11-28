@@ -179,7 +179,8 @@ $routes->group('', ['filter' => ['auth', 'tenant']], static function ($routes) {
 
     // reports
     $routes->get('reports', 'Reports::index');
-    $routes->get('dashboard', 'Reports::overview');                    // core 1.6 (C12): the dashboard
+    $routes->get('dashboard', 'Reports::overview');
+    $routes->get('overdue', 'Reports::overdue');                        // core 1.8 (E4): late and overdue work                    // core 1.6 (C12): the dashboard
     $routes->get('reports/trace', 'Reports::trace');
     $routes->get('reports/(:segment)', 'Reports::show/$1');
 

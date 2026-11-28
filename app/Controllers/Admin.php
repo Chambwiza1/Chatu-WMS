@@ -29,6 +29,9 @@ class Admin extends BaseController
         'transfer_loss_note' => ['Note required for transfer losses (1 = yes)', 'A final transfer receipt with missing units needs a note.'],
         'live_popups'       => ['Messages pop up (1 = yes, 0 = no)', 'New messages appear on every page until each is opened or closed.'],
         'live_sound'        => ['Sound with them (1 = yes, 0 = no)', 'A short tone when a new message or alert pops up. Each device can still mute it.'],
+        'escalate_days'     => ['Chase late work after (working days)', 'Reminders go to those who should act after this many working days; their managers are told after twice as many.'],
+        'working_days'      => ['Working days (1 = Monday … 7 = Sunday)', 'For example 1,2,3,4,5 or 1,2,3,4,5,6.'],
+        'holidays'          => ['Public holidays', 'Dates as YYYY-MM-DD, separated by commas. They do not count as working days.'],
         'live_alerts'       => ['Alerts pop up (1 = yes, 0 = no)', 'What waits for each person (approvals, transfers arriving, expired batches, items to reorder, fleet papers) pops up once per sign-in, and again when it changes.'],
         'session_idle_minutes' => ['Sign out after idle (minutes)', ''],
         'single_session'    => ['One sign-in per account (1 = on, 0 = off)', 'On: signing in on another device or browser signs the first one out, and it is told why.'],
@@ -250,6 +253,26 @@ class Admin extends BaseController
                     }
                     if ($k === 'wa_transport' && ! in_array($v, ['live', 'log'], true)) {
                         throw new BizException('WhatsApp: live or log.');
+                    }
+                    if ($k === 'escalate_days' && (! ctype_digit($v) || (int) $v < 1 || (int) $v > 30)) {
+                        throw new BizException('Chase late work after 1 to 30 working days.');
+                    }
+                    if ($k === 'working_days') {
+                        $d = array_values(array_unique(array_filter(array_map('trim', explode(',', $v)), 'strlen')));
+                        if (! $d || array_filter($d, static fn ($x) => ! in_array($x, ['1', '2', '3', '4', '5', '6', '7'], true))) {
+                            throw new BizException('Working days: numbers 1 (Monday) to 7 (Sunday), separated by commas.');
+                        }
+                        sort($d);
+                        $v = implode(',', $d);
+                    }
+                    if ($k === 'holidays') {
+                        preg_match_all('/\d{4}-\d{2}-\d{2}/', $v, $hm);
+                        foreach ($hm[0] as $h) {
+                            if (! strtotime($h)) {
+                                throw new BizException('Public holidays: ' . $h . ' is not a date.');
+                            }
+                        }
+                        $v = implode(', ', array_unique($hm[0]));
                     }
                     if ($k === 'currency_code') {
                         $v = strtoupper($v);

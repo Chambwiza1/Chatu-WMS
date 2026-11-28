@@ -93,6 +93,7 @@ final class Jobs
             $out['notified'] = self::daily()['notified'];
             Settings::set('last_daily', date('Y-m-d'));
             \App\Libraries\Messaging\Outbox::housekeeping();
+            $out['escalated'] = \App\Libraries\Workflow\Escalate::run();   // core 1.8 (E4): late work chased, then escalated
         }
         // core 1.4 (E5): e-mail copies of its people's messages, then whatever its own senders can send now
         $out['queued'] = \App\Libraries\Messaging\Messages::staffCopies();

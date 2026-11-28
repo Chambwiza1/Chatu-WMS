@@ -13,6 +13,7 @@
 <div class="kpi"><span class="n"><?= $lead_days === null ? '–' : $lead_days ?></span><span class="l">Days from order to dispatch</span></div>
 <div class="kpi"><span class="n"><?= $accuracy === null ? '–' : $accuracy . '%' ?></span><span class="l">Count lines exact<?= $count_lines ? ' (of ' . $count_lines . ')' : '' ?></span></div>
 <?php if ($cost): ?><a class="kpi<?= $losses > 0 ? ' warn' : '' ?>" href="<?= site_url('reports/losses') ?>"><span class="n"><?= money($losses) ?></span><span class="l">Written off (adjustments, counts)</span></a><?php endif ?>
+<a class="kpi<?= $overdue ? ' warn' : '' ?>" href="<?= site_url('overdue') ?>"><span class="n"><?= $overdue ?></span><span class="l">Late and overdue</span></a>
 <a class="kpi" href="<?= site_url('transfers') ?>"><span class="n"><?= $in_transit ?></span><span class="l">Transfers on the road</span></a>
 <a class="kpi<?= $expiring ? ' warn' : '' ?>" href="<?= site_url('reports/expiry') ?>"><span class="n"><?= $expiring ?></span><span class="l">Batches expiring within 30 days</span></a>
 <a class="kpi<?= $below ? ' warn' : '' ?>" href="<?= site_url('reports/reorder') ?>"><span class="n"><?= $below ?></span><span class="l">Items below reorder level</span></a>
